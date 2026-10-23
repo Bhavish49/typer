@@ -6,20 +6,33 @@ A sleek, interactive terminal-based typing speed test application built with Pyt
 
 ## ⚡ Quick Install & Run (Zero Setup)
 
-You don't need to manually navigate folders or run scripts. You can install it directly as a system command using `pip`:
+**Step 1:** Open any terminal and run **one** of these:
 
 ```bash
 pip install git+https://github.com/Bhavish49/typer.git
 ```
 
-Once installed, simply open any terminal (PowerShell, Command Prompt, macOS Terminal, Linux bash) and type:
+> **If `pip` is not recognized**, try one of these instead:
+> ```bash
+> python -m pip install git+https://github.com/Bhavish49/typer.git
+> ```
+> ```bash
+> py -m pip install git+https://github.com/Bhavish49/typer.git
+> ```
+
+**Step 2:** Launch the game from anywhere:
 
 ```bash
 typer
 ```
 *(or `speedtyper`)*
 
-The typing test will launch immediately!
+That's it! The typing test opens instantly.
+
+**View your progress anytime:**
+```bash
+typer --stats
+```
 
 ---
 
@@ -97,9 +110,9 @@ pip install -e .
 typer
 # or:
 python typer.py
-# or:
-python -m typer
 ```
+
+> **Troubleshooting:** If `pip` or `python` is not recognized, you need to [add Python to your PATH](https://realpython.com/add-python-to-path/). On Windows, you can also try `py -m pip install -e .` and `py typer.py`.
 
 ---
 
