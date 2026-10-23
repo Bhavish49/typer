@@ -86,7 +86,9 @@ pip install -e .
 # Run via command or script
 typer
 # or:
-python speed.py
+python typer.py
+# or:
+python -m typer
 ```
 
 ---

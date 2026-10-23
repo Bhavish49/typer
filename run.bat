@@ -27,4 +27,4 @@ if %errorlevel% neq 0 (
 )
 
 :: 3. Launch application
-python speed.py
+python typer.py

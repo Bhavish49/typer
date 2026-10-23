@@ -8,14 +8,14 @@ setup(
     long_description_content_type="text/markdown",
     author="Bhavish",
     url="https://github.com/Bhavish49/typer",
-    py_modules=["speed"],
+    py_modules=["typer"],
     install_requires=[
         "windows-curses; sys_platform == 'win32'",
     ],
     entry_points={
         "console_scripts": [
-            "typer=speed:cli",
-            "speedtyper=speed:cli",
+            "typer=typer:cli",
+            "speedtyper=typer:cli",
         ],
     },
     classifiers=[
