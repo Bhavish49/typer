@@ -4,18 +4,30 @@ A sleek, interactive terminal-based typing speed test application built with Pyt
 
 ## 🚀 Features
 
-- **3 Test Modes**:
-  - **One Line**: Quick single-sentence sprint (~10–15 words).
-  - **Stanza**: Medium test with poetic and prose stanzas (~35–50 words).
-  - **One Page**: Comprehensive full-page typing challenge (~110–140 words).
-- **Real-Time HUD**: Live tracking of **WPM** (Words Per Minute), **Accuracy (%)**, **Elapsed Time**, and **Progress (%)**.
-- **Dynamic Word Wrapping & Auto-Scroll**: Long stanzas and multi-line paragraphs cleanly wrap by words and automatically scroll as you type to keep the active line in view.
-- **Color Coded Feedback**:
+### 1. Difficulty Levels
+- **Easy**: Normal words only, clean and lowercase/simple phrasing with no tricky symbols or special characters.
+- **Medium**: Natural everyday sentences with common punctuation (commas, quotes `""`, apostrophes `'`, dashes `-`, colons `:`, and numbers).
+- **Hard**: High-challenge, grammatically sound technical sentences with special characters (brackets `()`, `[]`, `{}`, symbols `@`, `$`, `%`, `&`, `*`, `_`, `=`, `/`, `<>`, and code-style syntax).
+
+### 2. Text Length Options
+For every difficulty level, you can choose the text length:
+- **One Line**: Quick single-sentence sprint (~10–15 words).
+- **Stanza**: Medium test with stanzas / short paragraphs (~35–50 words).
+- **One Page**: Comprehensive full-page typing challenge (~100–140 words).
+
+### 3. Real-Time HUD & Visuals
+- Live **WPM** (Words Per Minute), **Accuracy (%)**, **Elapsed Time**, and **Progress (%)**.
+- **Dynamic Word Wrapping & Auto-Scroll**: Multi-line paragraphs cleanly wrap by words and automatically scroll as you type to keep the active line visible.
+- **Color-Coded Character Feedback**:
   - Green for correctly typed characters.
   - Red for errors.
-  - Underline indicator on the active character.
-- **Full Key Support**: Backspace for editing, arrow keys for menu navigation, and ESC to return to the menu or exit anytime.
-- **Results Summary**: Displays final WPM, accuracy, time taken, total characters typed, and error count.
+  - Underline indicator on the active cursor character.
+
+### 4. Full Controls
+- Backspace support for corrections.
+- Arrow keys / numbers for smooth 2-step menu selection.
+- ESC to navigate back or exit anytime.
+- Results screen displaying final WPM, accuracy, time taken, total characters typed, and error count.
 
 ---
 
@@ -46,11 +58,11 @@ A sleek, interactive terminal-based typing speed test application built with Pyt
 
 | Key | Action |
 | --- | --- |
-| `1` / `2` / `3` | Directly select test mode from Menu |
+| `1` / `2` / `3` | Select difficulty or length directly |
 | `UP` / `DOWN` | Navigate menu options |
 | `ENTER` | Confirm selection / Play again |
 | `BACKSPACE` | Delete previously typed character |
-| `ESC` | Return to menu or exit |
+| `ESC` | Go back to previous step / Return to menu / Exit |
 | `M` | Return to menu from results screen |
 
 ---
