@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "typer-speed-test"
+version = "1.0.0"
+description = "A sleek terminal-based typing speed test app built with Python and curses."
+readme = "README.md"
+requires-python = ">=3.7"
+license = { text = "MIT" }
+authors = [{ name = "Bhavish" }]
+dependencies = [
+    "windows-curses; sys_platform == 'win32'"
+]
+
+[project.scripts]
+typer = "speed:cli"
+speedtyper = "speed:cli"

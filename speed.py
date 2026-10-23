@@ -500,5 +500,11 @@ def main(stdscr):
         elif action == "again":
             continue
 
+def cli():
+    try:
+        wrapper(main)
+    except KeyboardInterrupt:
+        pass
+
 if __name__ == "__main__":
-    wrapper(main)
+    cli()
