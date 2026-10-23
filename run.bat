@@ -27,4 +27,4 @@ if %errorlevel% neq 0 (
 )
 
 :: 3. Launch application
-python typer.py %*
+python typen.py %*

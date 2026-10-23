@@ -15,5 +15,5 @@ dependencies = [
 ]
 
 [project.scripts]
-typer = "typer:cli"
-speedtyper = "typer:cli"
+typen = "typen:cli"
+speedtyper = "typen:cli"

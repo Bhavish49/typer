@@ -1,4 +1,4 @@
-# Typer - Terminal Speed Typing Test
+# Typen - Terminal Speed Typing Test
 
 A sleek, interactive terminal-based typing speed test application built with Python and `curses`.
 
@@ -23,7 +23,7 @@ pip install git+https://github.com/Bhavish49/typer.git
 **Step 2:** Launch the game from anywhere:
 
 ```bash
-typer
+typen
 ```
 *(or `speedtyper`)*
 
@@ -31,7 +31,7 @@ That's it! The typing test opens instantly.
 
 **View your progress anytime:**
 ```bash
-typer --stats
+typen --stats
 ```
 
 ---
@@ -70,7 +70,7 @@ For every difficulty level, you can choose the text length:
 - **Rolling Averages (Ao5 & Ao10)**: Standard speedcubing/typing benchmarks calculating your average of the last 5 and 10 tests.
 - **In-Terminal Speed Trend Chart**: Visual ASCII trend graph and sparkline directly inside your terminal.
 - **Dedicated Stats Dashboard**: Press `[S]` on the main menu to view all-time personal bests, total words typed, total practice time, and session history.
-- **CLI Quick Stats**: Run `typer --stats` or `python typer.py --stats` for an instant terminal summary without opening the game.
+- **CLI Quick Stats**: Run `typen --stats` or `python typen.py --stats` for an instant terminal summary without opening the game.
 
 ### 5. Full Keyboard Controls
 - Backspace support for corrections.
@@ -107,12 +107,12 @@ cd typer
 pip install -e .
 
 # Run via command or script
-typer
+typen
 # or:
-python typer.py
+python typen.py
 ```
 
-> **Troubleshooting:** If `pip` or `python` is not recognized, you need to [add Python to your PATH](https://realpython.com/add-python-to-path/). On Windows, you can also try `py -m pip install -e .` and `py typer.py`.
+> **Troubleshooting:** If `pip` or `python` is not recognized, you need to [add Python to your PATH](https://realpython.com/add-python-to-path/). On Windows, you can also try `py -m pip install -e .` and `py typen.py`.
 
 ---
 
