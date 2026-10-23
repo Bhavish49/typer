@@ -51,11 +51,19 @@ For every difficulty level, you can choose the text length:
   - Red for errors.
   - Underline indicator on the active cursor character.
 
-### 4. Full Keyboard Controls
+### 4. Progress Tracking & Personal Bests (Terminal-Native)
+- **Automatic History Tracking**: Every completed test is recorded locally with speed, accuracy, duration, and errors.
+- **Personal Best (PB) Alerts**: Celebratory highlight whenever you set a new WPM record in any difficulty and length mode.
+- **Rolling Averages (Ao5 & Ao10)**: Standard speedcubing/typing benchmarks calculating your average of the last 5 and 10 tests.
+- **In-Terminal Speed Trend Chart**: Visual ASCII trend graph and sparkline directly inside your terminal.
+- **Dedicated Stats Dashboard**: Press `[S]` on the main menu to view all-time personal bests, total words typed, total practice time, and session history.
+- **CLI Quick Stats**: Run `typer --stats` or `python typer.py --stats` for an instant terminal summary without opening the game.
+
+### 5. Full Keyboard Controls
 - Backspace support for corrections.
 - Arrow keys / numbers for smooth 2-step menu selection.
 - ESC to navigate back or exit anytime.
-- Results screen displaying final WPM, accuracy, time taken, total characters typed, and error count.
+- Results screen displaying final WPM, accuracy, time taken, total characters typed, error count, and lifetime average comparison.
 
 ---
 
@@ -64,8 +72,10 @@ For every difficulty level, you can choose the text length:
 | Key | Action |
 | --- | --- |
 | `1` / `2` / `3` | Select difficulty or length directly |
+| `S` | Open Progress & Stats dashboard from menu or results |
 | `UP` / `DOWN` | Navigate menu options |
 | `ENTER` | Confirm selection / Play again |
+| `C` | Clear history (inside Stats Dashboard) |
 | `BACKSPACE` | Delete previously typed character |
 | `ESC` | Go back to previous step / Return to menu / Exit |
 | `M` | Return to menu from results screen |

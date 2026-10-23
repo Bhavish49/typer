@@ -7,8 +7,7 @@ setup(
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
     author="Bhavish",
-    url="https://github.com/Bhavish49/typer",
-    py_modules=["typer"],
+    py_modules=["typer", "stats_manager"],
     install_requires=[
         "windows-curses; sys_platform == 'win32'",
     ],
