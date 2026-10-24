@@ -539,6 +539,7 @@ def stats_dashboard(stdscr):
     """
     Dedicated curses screen for viewing lifetime stats, rolling averages,
     ASCII speed trend chart, Top 5 Weak Keys, and recent sessions.
+    Designed with a clean, structured, easy-to-read frame layout.
     """
     curses.curs_set(0)
     stdscr.nodelay(False)
@@ -554,19 +555,27 @@ def stats_dashboard(stdscr):
         metrics = stats_manager.compute_metrics(sessions)
         weak_keys = stats_manager.get_top_weak_keys(top_n=5)
 
-        title_user = f"PROFILE: {active_user.upper()}" if active_user else "DEMO MODE (GUEST)"
-        title = f"=== TYPING STATS & PROGRESS DASHBOARD ({title_user}) ==="
-        safe_addstr(stdscr, 1, max(0, (w - len(title)) // 2), title, curses.color_pair(3) | curses.A_BOLD)
+        box_w = min(74, max(52, w - 4))
+        start_x = max(1, (w - box_w) // 2)
+
+        # Header Box
+        user_name = active_user.upper() if active_user else "GUEST / DEMO"
+        title_text = f" TYPING PROGRESS DASHBOARD  •  PROFILE: {user_name} "
+        border_line = "=" * box_w
+        div_line = "-" * (box_w - 4)
+
+        safe_addstr(stdscr, 1, start_x, border_line, curses.color_pair(3))
+        safe_addstr(stdscr, 2, start_x + max(0, (box_w - len(title_text)) // 2), title_text, curses.color_pair(3) | curses.A_BOLD)
+        safe_addstr(stdscr, 3, start_x, border_line, curses.color_pair(3))
 
         if stats_manager.is_demo_mode():
-            demo_note = "[DEMO MODE ACTIVE] Statistics and weak keys are not saved in Demo mode."
-            safe_addstr(stdscr, 3, max(0, (w - len(demo_note)) // 2), demo_note, curses.color_pair(6) | curses.A_BOLD)
-            hint = "Log in or create a profile to track your stats and identify weak keys!"
-            safe_addstr(stdscr, 5, max(0, (w - len(hint)) // 2), hint, curses.color_pair(4))
-            prompt = "[U] Login / Create Profile   |   [ESC / ENTER] Back to Menu"
+            demo_msg = "  [DEMO MODE ACTIVE] Tests taken in Demo mode are not saved."
+            safe_addstr(stdscr, 5, start_x, demo_msg, curses.color_pair(6) | curses.A_BOLD)
+            hint_msg = "  Create or log into a profile to save personal bests and track weak keys."
+            safe_addstr(stdscr, 7, start_x, hint_msg, curses.color_pair(4))
+            prompt = "[U] Login / Create Profile       [ESC / ENTER] Back to Menu"
             safe_addstr(stdscr, h - 2, max(0, (w - len(prompt)) // 2), prompt, curses.color_pair(3) | curses.A_BOLD)
             stdscr.refresh()
-
             ch = stdscr.getch()
             if ch in (ord("u"), ord("U")):
                 if auth_screen(stdscr):
@@ -576,67 +585,111 @@ def stats_dashboard(stdscr):
                 return
             continue
 
-        # Overview cards
+        # SECTION 1: PERFORMANCE OVERVIEW (Clean 2-column key/value grid)
         total_sec = summary.get("total_time_seconds", 0.0)
         mins = int(total_sec // 60)
         secs = int(total_sec % 60)
+        time_str = f"{mins}m {secs}s" if mins > 0 else f"{secs}s"
 
-        ao5_str = f"{metrics['ao5']} WPM" if metrics["ao5"] is not None else "N/A (need 5)"
-        ao10_str = f"{metrics['ao10']} WPM" if metrics["ao10"] is not None else "N/A (need 10)"
+        ao5_str = f"{metrics['ao5']} WPM" if metrics["ao5"] is not None else "--"
+        ao10_str = f"{metrics['ao10']} WPM" if metrics["ao10"] is not None else "--"
 
-        line1 = f"Tests: {metrics['total_tests']}   |   Words: {summary.get('total_words', 0)}   |   Practice Time: {mins}m {secs}s"
-        line2 = f"Best Speed: {metrics['best_wpm']} WPM   |   Avg Speed: {metrics['avg_wpm']} WPM   |   Best Acc: {metrics['best_acc']:.1f}%"
-        line3 = f"Rolling Averages:  Ao5 = {ao5_str}   |   Ao10 = {ao10_str}"
+        safe_addstr(stdscr, 5, start_x + 2, "PERFORMANCE OVERVIEW", curses.color_pair(5) | curses.A_BOLD)
+        safe_addstr(stdscr, 6, start_x + 2, div_line, curses.color_pair(4))
 
-        safe_addstr(stdscr, 3, max(2, (w - len(line1)) // 2), line1, curses.color_pair(4))
-        safe_addstr(stdscr, 4, max(2, (w - len(line2)) // 2), line2, curses.color_pair(5) | curses.A_BOLD)
-        safe_addstr(stdscr, 5, max(2, (w - len(line3)) // 2), line3, curses.color_pair(3))
+        col2_offset = (box_w - 4) // 2
 
-        # TOP 5 WEAKEST KEYS SECTION
-        curr_y = 7
-        weak_header = "-- Top 5 Weakest Keys (Most Mistakes) --"
-        safe_addstr(stdscr, curr_y, max(2, (w - len(weak_header)) // 2), weak_header, curses.color_pair(2) | curses.A_BOLD)
+        # Row 1
+        safe_addstr(stdscr, 7, start_x + 2, f"Tests Taken:    {metrics['total_tests']:<6}", curses.color_pair(4))
+        safe_addstr(stdscr, 7, start_x + 2 + col2_offset, f"Practice Time:    {time_str}", curses.color_pair(4))
+
+        # Row 2
+        safe_addstr(stdscr, 8, start_x + 2, f"Words Typed:    {summary.get('total_words', 0):<6}", curses.color_pair(4))
+        safe_addstr(stdscr, 8, start_x + 2 + col2_offset, f"Best Accuracy:    {metrics['best_acc']:.1f}%", curses.color_pair(4))
+
+        # Row 3
+        safe_addstr(stdscr, 9, start_x + 2, f"Top Speed:      {metrics['best_wpm']} WPM", curses.color_pair(1) | curses.A_BOLD)
+        safe_addstr(stdscr, 9, start_x + 2 + col2_offset, f"Average Speed:    {metrics['avg_wpm']:.1f} WPM", curses.color_pair(5) | curses.A_BOLD)
+
+        # Row 4 (Rolling averages)
+        safe_addstr(stdscr, 10, start_x + 2, f"Rolling (Ao5):  {ao5_str}", curses.color_pair(4))
+        safe_addstr(stdscr, 10, start_x + 2 + col2_offset, f"Rolling (Ao10):   {ao10_str}", curses.color_pair(4))
+
+        # SECTION 2: WEAKEST KEYS (CLEAN & READABLE)
+        curr_y = 12
+        safe_addstr(stdscr, curr_y, start_x + 2, "WEAKEST KEYS (NEEDS FOCUS)", curses.color_pair(2) | curses.A_BOLD)
+        curr_y += 1
+        safe_addstr(stdscr, curr_y, start_x + 2, div_line, curses.color_pair(4))
         curr_y += 1
 
         if weak_keys:
             total_mistakes = sum(data.get("weak_keys", {}).values())
-            items = []
-            for rank, (k, err_cnt) in enumerate(weak_keys, 1):
-                pct = (err_cnt / total_mistakes) * 100 if total_mistakes else 0.0
-                items.append(f"#{rank} {stats_manager.format_key_name(k)}: {err_cnt} ({pct:.0f}%)")
-            weak_line = "   ".join(items)
-            safe_addstr(stdscr, curr_y, max(2, (w - len(weak_line)) // 2), weak_line, curses.color_pair(5))
-        else:
-            no_weak = "[ No mistakes recorded yet! Take more tests to diagnose weak keys ]"
-            safe_addstr(stdscr, curr_y, max(2, (w - len(no_weak)) // 2), no_weak, curses.color_pair(4))
-        curr_y += 2
+            # Line 1: keys 1 to 3
+            l1_parts = []
+            for rank, (k, cnt) in enumerate(weak_keys[:3], 1):
+                pct = (cnt / total_mistakes) * 100 if total_mistakes else 0
+                l1_parts.append(f"{rank}. {stats_manager.format_key_name(k)}: {cnt} err ({pct:.0f}%)")
+            safe_addstr(stdscr, curr_y, start_x + 2, "     ".join(l1_parts), curses.color_pair(5))
+            curr_y += 1
 
-        # Speed Trend Chart
-        chart_header = "-- Recent Speed Trend --"
-        safe_addstr(stdscr, curr_y, max(2, (w - len(chart_header)) // 2), chart_header, curses.color_pair(4) | curses.A_UNDERLINE)
+            # Line 2: keys 4 to 5 (if any)
+            if len(weak_keys) > 3:
+                l2_parts = []
+                for rank, (k, cnt) in enumerate(weak_keys[3:5], 4):
+                    pct = (cnt / total_mistakes) * 100 if total_mistakes else 0
+                    l2_parts.append(f"{rank}. {stats_manager.format_key_name(k)}: {cnt} err ({pct:.0f}%)")
+                safe_addstr(stdscr, curr_y, start_x + 2, "     ".join(l2_parts), curses.color_pair(5))
+                curr_y += 1
+        else:
+            safe_addstr(stdscr, curr_y, start_x + 2, "[ No errors recorded yet! Complete more tests to diagnose weak keys ]", curses.color_pair(4))
+            curr_y += 1
+
         curr_y += 1
 
-        chart_max_pts = min(12, max(4, (w - 18) // 3))
-        chart_lines = stats_manager.generate_ascii_chart(sessions, max_points=chart_max_pts, height=4)
-        for c_idx, c_line in enumerate(chart_lines):
-            safe_addstr(stdscr, curr_y + c_idx, max(2, (w - len(c_line)) // 2), c_line, curses.color_pair(4))
+        # SECTION 3: RECENT SPEED TREND
+        if h >= curr_y + 10:
+            safe_addstr(stdscr, curr_y, start_x + 2, "SPEED PROGRESSION (LAST 10 TESTS)", curses.color_pair(3) | curses.A_BOLD)
+            curr_y += 1
+            safe_addstr(stdscr, curr_y, start_x + 2, div_line, curses.color_pair(4))
+            curr_y += 1
 
-        chart_bottom_y = curr_y + len(chart_lines)
+            chart_lines = stats_manager.generate_ascii_chart(sessions, max_points=10, height=3)
+            for c_line in chart_lines:
+                safe_addstr(stdscr, curr_y, start_x + 2, c_line, curses.color_pair(4))
+                curr_y += 1
+            curr_y += 1
 
-        # Recent sessions table (last 3)
-        if h > chart_bottom_y + 6:
-            cols_header = " Date & Time       Mode               WPM      Acc %    Time     PB "
-            safe_addstr(stdscr, chart_bottom_y + 1, max(2, (w - len(cols_header)) // 2), cols_header, curses.color_pair(5) | curses.A_BOLD)
+        # SECTION 4: RECENT TEST HISTORY
+        if h >= curr_y + 6:
+            safe_addstr(stdscr, curr_y, start_x + 2, "RECENT TEST HISTORY", curses.color_pair(5) | curses.A_BOLD)
+            curr_y += 1
+            safe_addstr(stdscr, curr_y, start_x + 2, div_line, curses.color_pair(4))
+            curr_y += 1
 
-            max_show = min(3, h - chart_bottom_y - 4)
-            for idx, s in enumerate(sessions[-max_show:]):
-                mode = f"{s.get('diff_name', '')[:6]} ({s.get('length_name', '')[:6]})"
-                pb_tag = "[PB]" if s.get("is_pb") else "    "
-                row_str = f" {s.get('timestamp', ''):<17} {mode:<18} {s.get('wpm', 0):<8} {s.get('accuracy', 0.0):.1f}%    {s.get('elapsed_seconds', 0.0):.1f}s    {pb_tag} "
-                safe_addstr(stdscr, chart_bottom_y + 2 + idx, max(2, (w - len(row_str)) // 2), row_str, curses.color_pair(4))
+            tbl_header = f"  {'TIME':<7} {'MODE':<20} {'WPM':<7} {'ACCURACY':<11} {'TIME':<9} {'STATUS'}"
+            safe_addstr(stdscr, curr_y, start_x, tbl_header, curses.color_pair(3) | curses.A_BOLD)
+            curr_y += 1
+
+            max_rows = min(3, max(1, h - curr_y - 3))
+            recent_reversed = list(reversed(sessions))[:max_rows]
+            for s in recent_reversed:
+                ts = s.get("timestamp", "")
+                time_only = ts.split(" ")[-1] if " " in ts else ts
+                diff = s.get("diff_name", "Easy")
+                length = s.get("length_name", "One Line")
+                mode_str = f"{diff} ({length})"[:19]
+                wpm_val = s.get("wpm", 0)
+                acc = s.get("accuracy", 0.0)
+                dur = f"{s.get('elapsed_seconds', 0.0):.1f}s"
+                pb_str = "[PB]" if s.get("is_pb") else ""
+
+                row_str = f"  {time_only:<7} {mode_str:<20} {wpm_val:<7} {acc:5.1f}%      {dur:<9} {pb_str}"
+                attr = curses.color_pair(1) | curses.A_BOLD if s.get("is_pb") else curses.color_pair(4)
+                safe_addstr(stdscr, curr_y, start_x, row_str, attr)
+                curr_y += 1
 
         # Footer controls
-        prompt = "[C] Clear My Stats   |   [U] Switch Profile   |   [ESC / ENTER] Back to Menu"
+        prompt = "[C] Clear My Stats     [U] Switch Profile     [ESC / ENTER] Back to Menu"
         safe_addstr(stdscr, h - 2, max(0, (w - len(prompt)) // 2), prompt, curses.color_pair(3) | curses.A_BOLD)
 
         stdscr.refresh()
@@ -649,7 +702,7 @@ def stats_dashboard(stdscr):
                 continue
             return
         elif ch in (ord("c"), ord("C")):
-            confirm_msg = f"Clear stats for profile '{active_user}'? [Y / N]: "
+            confirm_msg = f"Reset all stats for profile '{active_user}'? [Y / N]: "
             safe_addstr(stdscr, h - 2, max(0, (w - len(confirm_msg)) // 2), confirm_msg, curses.color_pair(2) | curses.A_BOLD)
             stdscr.refresh()
             conf_ch = stdscr.getch()
