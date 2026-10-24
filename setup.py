@@ -7,7 +7,7 @@ setup(
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
     author="Bhavish",
-    py_modules=["typer", "stats_manager"],
+    py_modules=["typer", "stats_manager", "texts"],
     install_requires=[
         "windows-curses; sys_platform == 'win32'",
     ],
