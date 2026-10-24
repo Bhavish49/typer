@@ -29,12 +29,7 @@ typer
 ```
 *(or `speedtyper`)*
 
-That's it! The typing test opens instantly.
-
-**View your progress anytime:**
-```bash
-typer --stats
-```
+Login to your profile, and the typing test and private stats dashboard open instantly.
 
 ---
 
@@ -78,12 +73,11 @@ For every difficulty level, you can choose the text length:
 - **Actionable Advice**: Highlights exactly which keys need practice so you can slow down on them and boost accuracy.
 
 ### 6. 📊 Progress Tracking & Personal Bests (Terminal-Native)
-- **Automatic History Tracking**: Every completed test is recorded locally with speed, accuracy, duration, and errors.
+- **Automatic History Tracking**: Every completed test is recorded locally under your profile with speed, accuracy, duration, and errors.
 - **Personal Best (PB) Alerts**: Celebratory highlight whenever you set a new WPM record in any difficulty and length mode.
 - **Rolling Averages (Ao5 & Ao10)**: Standard speedcubing/typing benchmarks calculating your average of the last 5 and 10 tests.
-- **In-Terminal Speed Trend Chart**: Visual ASCII trend graph and sparkline directly inside your terminal.
-- **Dedicated Stats Dashboard**: Press `[S]` on the main menu to view all-time personal bests, top weak keys, total practice time, and session history.
-- **CLI Quick Stats**: Run `typer --stats` or `python typer.py --stats` for an instant terminal summary without opening the game.
+- **In-Terminal Speed Trend Chart**: Visual ASCII trend graph directly inside your dashboard.
+- **Dedicated Stats Dashboard**: Press `[S]` on the menu after login to view your personal bests, top weak keys, total practice time, and session history.
 
 ### 7. Full Keyboard Controls
 - Backspace support for corrections.

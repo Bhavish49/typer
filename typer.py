@@ -854,11 +854,6 @@ def main(stdscr):
 
 
 def cli():
-    if len(sys.argv) > 1 and sys.argv[1].lower() in ("--stats", "-s", "stats"):
-        target = sys.argv[2] if len(sys.argv) > 2 else None
-        stats_manager.print_cli_stats(target)
-        return
-
     try:
         wrapper(main)
     except KeyboardInterrupt:
