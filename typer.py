@@ -4,6 +4,7 @@ import time
 import random
 import sys
 import stats_manager
+from texts import DATASET
 
 
 def safe_addstr(stdscr, y, x, text, attr=0):
@@ -19,15 +20,13 @@ def safe_addstr(stdscr, y, x, text, attr=0):
             except curses.error:
                 pass
 
-from texts import DATASET
-
 
 def layout_text(text, max_width):
     """
     Computes (row, col) coordinates for each character in text,
     wrapping words cleanly at max_width without truncating words.
     """
-    words = text.split(' ')
+    words = text.split(" ")
     char_positions = []
     curr_row = 0
     curr_col = 0
@@ -45,141 +44,260 @@ def layout_text(text, max_width):
     total_rows = curr_row + 1
     return char_positions, total_rows
 
-def difficulty_menu(stdscr):
+
+def prompt_text_input(stdscr, y, x, prompt_label, is_password=False, max_len=20) -> str | None:
     """
-    Step 1: Select Difficulty Level (Easy, Medium, Hard) or View Stats.
+    Interactive single-line text input field in curses.
+    Supports typing, backspace, Enter (confirm), and ESC (cancel).
+    Masks with '*' if is_password is True.
+    """
+    curses.curs_set(1)
+    stdscr.nodelay(False)
+    buffer = []
+
+    while True:
+        display_str = ("*" * len(buffer)) if is_password else "".join(buffer)
+        prompt_line = f"{prompt_label}: {display_str} "
+        safe_addstr(stdscr, y, x, prompt_line + "   ", curses.color_pair(3) | curses.A_BOLD)
+        stdscr.move(y, x + len(prompt_label) + 2 + len(buffer))
+        stdscr.refresh()
+
+        ch = stdscr.getch()
+        if ch == 27:  # ESC cancels
+            curses.curs_set(0)
+            return None
+        elif ch in (10, 13, curses.KEY_ENTER):
+            curses.curs_set(0)
+            return "".join(buffer).strip()
+        elif ch in (curses.KEY_BACKSPACE, 8, 127):
+            if buffer:
+                buffer.pop()
+        elif 32 <= ch <= 126 and len(buffer) < max_len:
+            buffer.append(chr(ch))
+
+
+def auth_screen(stdscr) -> bool:
+    """
+    Screen 0: Welcome & User Profile Selection.
+    Options:
+      [1] Login (Existing User)
+      [2] Create New Profile
+      [3] Demo Mode (No stats saved)
+      [ESC] Quit
+    Returns True if user logged in or entered Demo mode, False to quit.
     """
     curses.curs_set(0)
     stdscr.nodelay(False)
-    diff_keys = ["easy", "medium", "hard", "stats"]
+
+    message = ""
+    message_color = curses.color_pair(5)
+
+    while True:
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
+
+        title = "=== SPEED TYPER - USER PROFILES ==="
+        subtitle = "Multi-User Typing Speed Test with Weak Key Diagnostics"
+
+        safe_addstr(stdscr, max(1, h // 2 - 8), max(0, (w - len(title)) // 2), title, curses.color_pair(3) | curses.A_BOLD)
+        safe_addstr(stdscr, max(2, h // 2 - 6), max(0, (w - len(subtitle)) // 2), subtitle, curses.color_pair(4))
+
+        registered_users = stats_manager.list_users()
+        user_count_str = f"Registered Profiles: {len(registered_users)}"
+        safe_addstr(stdscr, max(3, h // 2 - 4), max(0, (w - len(user_count_str)) // 2), user_count_str, curses.color_pair(5))
+
+        options = [
+            ("[1] Login", "Select an existing user profile and enter password"),
+            ("[2] Create Profile", "Create a new profile with username & password"),
+            ("[3] Demo Mode", "Practice without recording statistics or weak keys"),
+            ("[ESC] Quit", "Exit the application"),
+        ]
+
+        start_y = max(5, h // 2 - 2)
+        for idx, (label, desc) in enumerate(options):
+            line = f"  {label:<18} - {desc}"
+            attr = curses.color_pair(5) | curses.A_BOLD if idx == 0 else curses.color_pair(4)
+            safe_addstr(stdscr, start_y + (idx * 2), max(2, (w - 70) // 2), line, attr)
+
+        if message:
+            safe_addstr(stdscr, start_y + len(options) * 2 + 1, max(0, (w - len(message)) // 2), message, message_color | curses.A_BOLD)
+
+        footer = "Press [1], [2], [3], or [ESC]"
+        safe_addstr(stdscr, h - 2, max(0, (w - len(footer)) // 2), footer, curses.color_pair(3))
+
+        stdscr.refresh()
+        ch = stdscr.getch()
+
+        if ch == 27:  # ESC
+            return False
+
+        elif ch in (ord("1"),):
+            # Login
+            if not registered_users:
+                message = "No profiles found yet! Press [2] to create your first profile."
+                message_color = curses.color_pair(5)
+                continue
+
+            # Prompt username
+            stdscr.erase()
+            login_title = "=== USER LOGIN ==="
+            safe_addstr(stdscr, max(1, h // 2 - 6), max(0, (w - len(login_title)) // 2), login_title, curses.color_pair(3) | curses.A_BOLD)
+
+            users_preview = "Available profiles: " + ", ".join(registered_users[:8])
+            safe_addstr(stdscr, max(2, h // 2 - 4), max(0, (w - len(users_preview)) // 2), users_preview, curses.color_pair(4))
+
+            input_y = max(4, h // 2 - 1)
+            input_x = max(2, (w - 36) // 2)
+
+            username = prompt_text_input(stdscr, input_y, input_x, "Username", is_password=False)
+            if not username:
+                message = "Login cancelled."
+                message_color = curses.color_pair(4)
+                continue
+
+            password = prompt_text_input(stdscr, input_y + 2, input_x, "Password", is_password=True)
+            if password is None:
+                message = "Login cancelled."
+                message_color = curses.color_pair(4)
+                continue
+
+            ok, res_msg = stats_manager.authenticate(username, password)
+            if ok:
+                return True
+            else:
+                message = f"Error: {res_msg}"
+                message_color = curses.color_pair(2)
+
+        elif ch in (ord("2"),):
+            # Create Profile
+            stdscr.erase()
+            create_title = "=== CREATE NEW PROFILE ==="
+            safe_addstr(stdscr, max(1, h // 2 - 6), max(0, (w - len(create_title)) // 2), create_title, curses.color_pair(3) | curses.A_BOLD)
+
+            hint = "Choose a simple username and password (saved locally on your machine)"
+            safe_addstr(stdscr, max(2, h // 2 - 4), max(0, (w - len(hint)) // 2), hint, curses.color_pair(4))
+
+            input_y = max(4, h // 2 - 1)
+            input_x = max(2, (w - 40) // 2)
+
+            username = prompt_text_input(stdscr, input_y, input_x, "New Username", is_password=False)
+            if not username:
+                message = "Profile creation cancelled."
+                message_color = curses.color_pair(4)
+                continue
+
+            password = prompt_text_input(stdscr, input_y + 2, input_x, "Password", is_password=True)
+            if password is None:
+                message = "Profile creation cancelled."
+                message_color = curses.color_pair(4)
+                continue
+
+            confirm_pass = prompt_text_input(stdscr, input_y + 4, input_x, "Confirm Password", is_password=True)
+            if confirm_pass != password:
+                message = "Error: Passwords do not match. Please try again."
+                message_color = curses.color_pair(2)
+                continue
+
+            ok, res_msg = stats_manager.create_user(username, password)
+            if ok:
+                return True
+            else:
+                message = f"Error: {res_msg}"
+                message_color = curses.color_pair(2)
+
+        elif ch in (ord("3"),):
+            # Demo Mode
+            stats_manager.set_demo_mode()
+            return True
+
+
+def get_user_header_tag() -> str:
+    """Returns a visual badge showing the current user or Demo mode."""
+    if stats_manager.is_demo_mode():
+        return "[DEMO MODE - STATS NOT SAVED]"
+    user = stats_manager.get_active_user()
+    return f"[USER: {user.upper()}]" if user else "[GUEST]"
+
+
+def difficulty_menu(stdscr):
+    """
+    Step 1: Select Difficulty Level (Easy, Medium, Hard), View Stats, or Switch User.
+    """
+    curses.curs_set(0)
+    stdscr.nodelay(False)
+    diff_keys = ["easy", "medium", "hard"]
+    options = [
+        ("1", "Easy", "Normal words only, simple and clean"),
+        ("2", "Medium", "Everyday punctuation, quotes, numbers, and contractions"),
+        ("3", "Hard", "Special characters, brackets, symbols, and technical syntax"),
+        ("S", "Stats Dashboard", "View lifetime stats, ASCII speed trend, and weak keys"),
+        ("U", "Switch Profile", "Change user profile or switch to/from Demo mode"),
+    ]
     selected_idx = 0
 
     while True:
         stdscr.erase()
         h, w = stdscr.getmaxyx()
 
-        title = "=== SPEED TYPING TEST ==="
-        subtitle = "Select an option to begin:"
+        title = "=== TERMINAL SPEED TYPING TEST ==="
+        user_tag = get_user_header_tag()
+        user_color = curses.color_pair(6) if stats_manager.is_demo_mode() else curses.color_pair(5)
 
         safe_addstr(stdscr, max(0, h // 2 - 8), max(0, (w - len(title)) // 2), title, curses.color_pair(3) | curses.A_BOLD)
-        safe_addstr(stdscr, max(0, h // 2 - 6), max(0, (w - len(subtitle)) // 2), subtitle, curses.color_pair(4))
+        safe_addstr(stdscr, max(1, h // 2 - 7), max(0, (w - len(user_tag)) // 2), user_tag, user_color | curses.A_BOLD)
 
-        menu_items = [
-            ("1", "EASY", "Normal words only, simple and clean"),
-            ("2", "MEDIUM", "Everyday punctuation, quotes, numbers, contractions"),
-            ("3", "HARD", "Special characters, brackets, symbols, code syntax"),
-            ("S", "STATS & PROGRESS", "View speed trend chart, personal bests & history"),
-        ]
+        subtitle = "STEP 1: Select Difficulty"
+        safe_addstr(stdscr, max(2, h // 2 - 5), max(0, (w - len(subtitle)) // 2), subtitle, curses.color_pair(4))
 
-        for idx, (hotkey, name, desc) in enumerate(menu_items):
-            item_text = f" [{hotkey}] {name} - {desc} "
+        for idx, (key, name, desc) in enumerate(options):
+            item_text = f" [{key}] {name} - {desc} "
             y = h // 2 - 3 + (idx * 2)
             x = max(2, (w - len(item_text)) // 2)
 
             if idx == selected_idx:
-                safe_addstr(stdscr, y, x, item_text, curses.color_pair(5) | curses.A_BOLD | curses.A_REVERSE)
+                stdscr.attron(curses.color_pair(5) | curses.A_BOLD | curses.A_REVERSE)
+                stdscr.addstr(y, x, item_text)
+                stdscr.attroff(curses.color_pair(5) | curses.A_BOLD | curses.A_REVERSE)
             else:
-                safe_addstr(stdscr, y, x, item_text, curses.color_pair(4))
+                stdscr.attron(curses.color_pair(4))
+                stdscr.addstr(y, x, item_text)
+                stdscr.attroff(curses.color_pair(4))
 
-        instructions = "Use [UP / DOWN] & [ENTER], press [1-3, S], or [ESC] to exit"
-        safe_addstr(stdscr, max(0, h // 2 + 7), max(0, (w - len(instructions)) // 2), instructions, curses.color_pair(3))
+        instructions = "Use [UP / DOWN] & [ENTER], press [1-3], [S] for Stats, [U] for User, or [ESC] to exit"
+        safe_addstr(stdscr, max(0, h // 2 + 8), max(0, (w - len(instructions)) // 2), instructions, curses.color_pair(3))
 
         stdscr.refresh()
-
         ch = stdscr.getch()
 
-        if ch == 27:  # ESC
+        if ch == 27:  # ESC exits
             return None
-        elif ch in (curses.KEY_UP, ord('k'), ord('K')):
-            selected_idx = (selected_idx - 1) % len(diff_keys)
-        elif ch in (curses.KEY_DOWN, ord('j'), ord('J')):
-            selected_idx = (selected_idx + 1) % len(diff_keys)
+        elif ch in (curses.KEY_UP, ord("k"), ord("K")):
+            selected_idx = (selected_idx - 1) % len(options)
+        elif ch in (curses.KEY_DOWN, ord("j"), ord("J")):
+            selected_idx = (selected_idx + 1) % len(options)
         elif ch in (10, 13, curses.KEY_ENTER):
-            return diff_keys[selected_idx]
-        elif ch in (ord('1'), ord('2'), ord('3')):
-            return diff_keys[ch - ord('1')]
-        elif ch in (ord('s'), ord('S')):
+            chosen_key = options[selected_idx][0]
+            if chosen_key == "1":
+                return "easy"
+            elif chosen_key == "2":
+                return "medium"
+            elif chosen_key == "3":
+                return "hard"
+            elif chosen_key == "S":
+                return "stats"
+            elif chosen_key == "U":
+                return "switch_user"
+        elif ch in (ord("1"), ord("e"), ord("E")):
+            return "easy"
+        elif ch in (ord("2"), ord("m"), ord("M")):
+            return "medium"
+        elif ch in (ord("3"), ord("h"), ord("H")):
+            return "hard"
+        elif ch in (ord("s"), ord("S")):
             return "stats"
+        elif ch in (ord("u"), ord("U")):
+            return "switch_user"
 
-def stats_dashboard(stdscr):
-    """
-    Dedicated curses screen for viewing lifetime stats, rolling averages,
-    ASCII speed trend chart, and recent sessions.
-    """
-    curses.curs_set(0)
-    stdscr.nodelay(False)
-
-    while True:
-        stdscr.erase()
-        h, w = stdscr.getmaxyx()
-
-        data = stats_manager.load_history()
-        summary = data.get("summary", {})
-        sessions = data.get("sessions", [])
-        metrics = stats_manager.compute_metrics(sessions)
-
-        title = "=== TYPING STATS & PROGRESS DASHBOARD ==="
-        safe_addstr(stdscr, 1, max(0, (w - len(title)) // 2), title, curses.color_pair(3) | curses.A_BOLD)
-
-        # Overview cards / lines
-        total_sec = summary.get("total_time_seconds", 0.0)
-        mins = int(total_sec // 60)
-        secs = int(total_sec % 60)
-
-        ao5_str = f"{metrics['ao5']} WPM" if metrics['ao5'] is not None else "N/A (need 5)"
-        ao10_str = f"{metrics['ao10']} WPM" if metrics['ao10'] is not None else "N/A (need 10)"
-
-        line1 = f"Tests: {metrics['total_tests']}   |   Words: {summary.get('total_words', 0)}   |   Practice Time: {mins}m {secs}s"
-        line2 = f"Best Speed: {metrics['best_wpm']} WPM   |   Avg Speed: {metrics['avg_wpm']} WPM   |   Best Acc: {metrics['best_acc']:.1f}%"
-        line3 = f"Rolling Averages:  Ao5 = {ao5_str}   |   Ao10 = {ao10_str}"
-
-        safe_addstr(stdscr, 3, max(2, (w - len(line1)) // 2), line1, curses.color_pair(4))
-        safe_addstr(stdscr, 4, max(2, (w - len(line2)) // 2), line2, curses.color_pair(5) | curses.A_BOLD)
-        safe_addstr(stdscr, 5, max(2, (w - len(line3)) // 2), line3, curses.color_pair(3))
-
-        # Speed Trend Chart
-        chart_header = "-- Recent Speed Trend --"
-        safe_addstr(stdscr, 7, max(2, (w - len(chart_header)) // 2), chart_header, curses.color_pair(4) | curses.A_UNDERLINE)
-
-        chart_max_pts = min(12, max(4, (w - 18) // 3))
-        chart_lines = stats_manager.generate_ascii_chart(sessions, max_points=chart_max_pts, height=5)
-        for c_idx, c_line in enumerate(chart_lines):
-            safe_addstr(stdscr, 8 + c_idx, max(2, (w - len(c_line)) // 2), c_line, curses.color_pair(4))
-
-        chart_bottom_y = 8 + len(chart_lines)
-
-        # Recent sessions table (last 4)
-        if h > chart_bottom_y + 8:
-            table_header = "-- Last Sessions --"
-            safe_addstr(stdscr, chart_bottom_y + 1, max(2, (w - len(table_header)) // 2), table_header, curses.color_pair(4) | curses.A_UNDERLINE)
-
-            cols_header = " Date & Time       Mode               WPM      Acc %    Time     PB "
-            safe_addstr(stdscr, chart_bottom_y + 2, max(2, (w - len(cols_header)) // 2), cols_header, curses.color_pair(5) | curses.A_BOLD)
-
-            max_show = min(4, h - chart_bottom_y - 5)
-            for idx, s in enumerate(sessions[-max_show:]):
-                mode = f"{s.get('diff_name', '')[:6]} ({s.get('length_name', '')[:6]})"
-                pb_tag = "[PB]" if s.get("is_pb") else "    "
-                row_str = f" {s.get('timestamp', ''):<17} {mode:<18} {s.get('wpm', 0):<8} {s.get('accuracy', 0.0):.1f}%    {s.get('elapsed_seconds', 0.0):.1f}s    {pb_tag} "
-                safe_addstr(stdscr, chart_bottom_y + 3 + idx, max(2, (w - len(row_str)) // 2), row_str, curses.color_pair(4))
-
-        # Footer controls
-        prompt = "[C] Clear History   |   [ESC / ENTER / B] Back to Menu"
-        safe_addstr(stdscr, h - 2, max(0, (w - len(prompt)) // 2), prompt, curses.color_pair(3) | curses.A_BOLD)
-
-        stdscr.refresh()
-
-        ch = stdscr.getch()
-
-        if ch in (27, 10, 13, curses.KEY_ENTER, ord('b'), ord('B'), ord('q'), ord('Q')):
-            return
-        elif ch in (ord('c'), ord('C')):
-            confirm_msg = "Are you sure you want to clear all history? [Y / N]: "
-            safe_addstr(stdscr, h - 2, max(0, (w - len(confirm_msg)) // 2), confirm_msg, curses.color_pair(2) | curses.A_BOLD)
-            stdscr.refresh()
-            conf_ch = stdscr.getch()
-            if conf_ch in (ord('y'), ord('Y')):
-                stats_manager.clear_history()
 
 def length_menu(stdscr, diff_key):
     """
@@ -197,15 +315,14 @@ def length_menu(stdscr, diff_key):
         h, w = stdscr.getmaxyx()
 
         title = f"=== SPEED TYPING TEST [{diff_name.upper()}] ==="
+        user_tag = get_user_header_tag()
+        user_color = curses.color_pair(6) if stats_manager.is_demo_mode() else curses.color_pair(5)
+
+        safe_addstr(stdscr, max(0, h // 2 - 8), max(0, (w - len(title)) // 2), title, curses.color_pair(3) | curses.A_BOLD)
+        safe_addstr(stdscr, max(1, h // 2 - 7), max(0, (w - len(user_tag)) // 2), user_tag, user_color | curses.A_BOLD)
+
         subtitle = "STEP 2: Select Text Length"
-
-        stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
-        stdscr.addstr(max(0, h // 2 - 7), max(0, (w - len(title)) // 2), title)
-        stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
-
-        stdscr.attron(curses.color_pair(4))
-        stdscr.addstr(max(0, h // 2 - 5), max(0, (w - len(subtitle)) // 2), subtitle)
-        stdscr.attroff(curses.color_pair(4))
+        safe_addstr(stdscr, max(2, h // 2 - 5), max(0, (w - len(subtitle)) // 2), subtitle, curses.color_pair(4))
 
         for idx, key in enumerate(length_keys):
             info = lengths[key]
@@ -223,50 +340,47 @@ def length_menu(stdscr, diff_key):
                 stdscr.attroff(curses.color_pair(4))
 
         instructions = "Use [UP / DOWN] & [ENTER], press [1-3], or [ESC] to go back"
-        stdscr.attron(curses.color_pair(3))
-        stdscr.addstr(max(0, h // 2 + 6), max(0, (w - len(instructions)) // 2), instructions)
-        stdscr.attroff(curses.color_pair(3))
+        safe_addstr(stdscr, max(0, h // 2 + 6), max(0, (w - len(instructions)) // 2), instructions, curses.color_pair(3))
 
         stdscr.refresh()
-
         ch = stdscr.getch()
 
         if ch == 27:  # ESC goes back
             return None
-        elif ch in (curses.KEY_UP, ord('k'), ord('K')):
+        elif ch in (curses.KEY_UP, ord("k"), ord("K")):
             selected_idx = (selected_idx - 1) % len(length_keys)
-        elif ch in (curses.KEY_DOWN, ord('j'), ord('J')):
+        elif ch in (curses.KEY_DOWN, ord("j"), ord("J")):
             selected_idx = (selected_idx + 1) % len(length_keys)
         elif ch in (10, 13, curses.KEY_ENTER):
             return length_keys[selected_idx]
-        elif ch in (ord('1'), ord('2'), ord('3')):
+        elif ch in (ord("1"), ord("2"), ord("3")):
             return chr(ch)
 
-def display_typing_arena(stdscr, diff_name, length_name, target_text, current_text, char_positions, total_rows, wpm, accuracy, elapsed):
+
+def display_typing_arena(
+    stdscr, diff_name, length_name, target_text, current_text, char_positions, total_rows, wpm, accuracy, elapsed
+):
     stdscr.erase()
     h, w = stdscr.getmaxyx()
 
-    # Header with current configuration
-    header = f" SPEED TYPING TEST  [{diff_name.upper()} | {length_name.upper()}] "
-    stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
-    stdscr.addstr(1, max(0, (w - len(header)) // 2), header)
-    stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+    # User Tag / Demo Tag
+    user_tag = get_user_header_tag()
+    user_color = curses.color_pair(6) if stats_manager.is_demo_mode() else curses.color_pair(5)
+
+    header = f" SPEED TYPING TEST  [{diff_name.upper()} | {length_name.upper()}]  {user_tag} "
+    safe_addstr(stdscr, 1, max(0, (w - len(header)) // 2), header, curses.color_pair(3) | curses.A_BOLD)
 
     # Progress %
     progress = (len(current_text) / len(target_text)) * 100 if target_text else 0.0
 
     # Live HUD Bar
     stats = f"  WPM: {wpm:3d}  |  Accuracy: {accuracy:5.1f}%  |  Time: {elapsed:4.1f}s  |  Progress: {progress:3.0f}%  |  [ESC: Menu]  "
-    stdscr.attron(curses.color_pair(5))
-    stdscr.addstr(3, max(0, (w - len(stats)) // 2), stats)
-    stdscr.attroff(curses.color_pair(5))
+    safe_addstr(stdscr, 3, max(0, (w - len(stats)) // 2), stats, curses.color_pair(5))
 
     # Divider
-    divider_len = min(w - 4, 82)
+    divider_len = min(w - 4, 84)
     divider = "-" * divider_len
-    stdscr.attron(curses.color_pair(4))
-    stdscr.addstr(4, max(0, (w - divider_len) // 2), divider)
-    stdscr.attroff(curses.color_pair(4))
+    safe_addstr(stdscr, 4, max(0, (w - divider_len) // 2), divider, curses.color_pair(4))
 
     # Text rendering area
     start_y = 6
@@ -314,13 +428,14 @@ def display_typing_arena(stdscr, diff_name, length_name, target_text, current_te
 
     if total_rows > max_visible_rows:
         indicator = f" [Lines {scroll_row + 1}-{min(total_rows, scroll_row + max_visible_rows)} of {total_rows}] "
-        stdscr.attron(curses.color_pair(4))
-        stdscr.addstr(h - 2, max(0, (w - len(indicator)) // 2), indicator)
-        stdscr.attroff(curses.color_pair(4))
+        safe_addstr(stdscr, h - 2, max(0, (w - len(indicator)) // 2), indicator, curses.color_pair(4))
 
     stdscr.refresh()
 
-def result_screen(stdscr, diff_key, diff_name, length_key, length_name, wpm, accuracy, elapsed, total_chars, errors):
+
+def result_screen(
+    stdscr, diff_key, diff_name, length_key, length_name, wpm, accuracy, elapsed, total_chars, errors, errors_by_char
+):
     stdscr.nodelay(False)
     curses.curs_set(0)
     stdscr.erase()
@@ -328,13 +443,26 @@ def result_screen(stdscr, diff_key, diff_name, length_key, length_name, wpm, acc
 
     # Record session & get stats comparison
     stats_info = stats_manager.record_session(
-        diff_key, diff_name, length_key, length_name, wpm, accuracy, elapsed, total_chars, errors
+        diff_key,
+        diff_name,
+        length_key,
+        length_name,
+        wpm,
+        accuracy,
+        elapsed,
+        total_chars,
+        errors,
+        errors_by_char=errors_by_char,
     )
 
-    y_offset = max(1, h // 2 - 8)
+    y_offset = max(1, h // 2 - 9)
 
-    # Personal best banner
-    if stats_info.get("is_category_pb"):
+    # Demo mode notification or Personal Best alert
+    if stats_info.get("is_demo"):
+        demo_banner = "[ DEMO MODE: Test completed, but results are NOT saved to stats ]"
+        safe_addstr(stdscr, y_offset, max(0, (w - len(demo_banner)) // 2), demo_banner, curses.color_pair(6) | curses.A_BOLD)
+        y_offset += 2
+    elif stats_info.get("is_category_pb"):
         prev_best = stats_info.get("prev_category_best", 0)
         pb_banner = f"*** NEW PERSONAL BEST! (Previous: {prev_best} WPM -> Now: {wpm} WPM) ***"
         safe_addstr(stdscr, y_offset, max(0, (w - len(pb_banner)) // 2), pb_banner, curses.color_pair(5) | curses.A_BOLD)
@@ -344,13 +472,16 @@ def result_screen(stdscr, diff_key, diff_name, length_key, length_name, wpm, acc
     safe_addstr(stdscr, y_offset, max(0, (w - len(banner)) // 2), banner, curses.color_pair(1) | curses.A_BOLD)
     y_offset += 2
 
-    config_info = f"Difficulty: {diff_name}   |   Length: {length_name}"
+    user_tag = get_user_header_tag()
+    config_info = f"Profile: {user_tag}   |   Difficulty: {diff_name}   |   Length: {length_name}"
     safe_addstr(stdscr, y_offset, max(0, (w - len(config_info)) // 2), config_info, curses.color_pair(3))
     y_offset += 2
 
     lifetime_avg = stats_info.get("lifetime_avg_wpm", float(wpm))
     diff_from_avg = stats_info.get("wpm_diff_from_avg", 0.0)
-    avg_comparison = f"({diff_from_avg:+.1f} vs lifetime avg of {lifetime_avg:.1f} WPM)"
+    avg_comparison = (
+        f"({diff_from_avg:+.1f} vs lifetime avg of {lifetime_avg:.1f} WPM)" if not stats_info.get("is_demo") else ""
+    )
 
     lines = [
         f"Typing Speed:    {wpm} Words Per Minute (WPM) {avg_comparison}",
@@ -365,8 +496,29 @@ def result_screen(stdscr, diff_key, diff_name, length_key, length_name, wpm, acc
         attr = curses.color_pair(5) | curses.A_BOLD if idx == 0 else curses.color_pair(4)
         safe_addstr(stdscr, y, x, line, attr)
 
+    y_offset += len(lines) + 1
+
+    # WEAK KEYS SECTION: Display keys that stumbled in this session
+    session_stumbles = stats_info.get("session_weak_keys", [])
+    if session_stumbles:
+        stumble_items = [f"{stats_manager.format_key_name(k)}: {cnt}x" for k, cnt in session_stumbles]
+        stumble_line = "Keys Missed in this Test:  " + "   ".join(stumble_items)
+        safe_addstr(stdscr, y_offset, max(0, (w - len(stumble_line)) // 2), stumble_line, curses.color_pair(2) | curses.A_BOLD)
+        y_offset += 1
+
+    # All-time top weak keys
+    all_time_weak = stats_info.get("all_time_weak_keys", [])
+    if all_time_weak and not stats_info.get("is_demo"):
+        weak_items = [f"#{i+1} {stats_manager.format_key_name(k)} ({cnt} errs)" for i, (k, cnt) in enumerate(all_time_weak[:4])]
+        weak_line = "Top Stumbling Keys (All-Time):  " + "  |  ".join(weak_items)
+        safe_addstr(stdscr, y_offset, max(0, (w - len(weak_line)) // 2), weak_line, curses.color_pair(5))
+        y_offset += 1
+        tip = "[*] Tip: Slow down slightly on your weak keys to boost overall accuracy!"
+        safe_addstr(stdscr, y_offset, max(0, (w - len(tip)) // 2), tip, curses.color_pair(3))
+        y_offset += 1
+
     prompt = "Press [ENTER] to play again, [M] for Menu, [S] for Stats, or [ESC] to quit"
-    safe_addstr(stdscr, y_offset + len(lines) + 2, max(0, (w - len(prompt)) // 2), prompt, curses.A_BLINK | curses.color_pair(3))
+    safe_addstr(stdscr, y_offset + 2, max(0, (w - len(prompt)) // 2), prompt, curses.A_BLINK | curses.color_pair(3))
 
     stdscr.refresh()
 
@@ -374,13 +526,136 @@ def result_screen(stdscr, diff_key, diff_name, length_key, length_name, wpm, acc
         ch = stdscr.getch()
         if ch == 27:  # ESC
             return "quit"
-        elif ch in (ord('m'), ord('M')):
+        elif ch in (ord("m"), ord("M")):
             return "menu"
-        elif ch in (ord('s'), ord('S')):
+        elif ch in (ord("s"), ord("S")):
             stats_dashboard(stdscr)
             return "menu"
-        elif ch in (10, 13, curses.KEY_ENTER, ord(' ')):
+        elif ch in (10, 13, curses.KEY_ENTER, ord(" ")):
             return "again"
+
+
+def stats_dashboard(stdscr):
+    """
+    Dedicated curses screen for viewing lifetime stats, rolling averages,
+    ASCII speed trend chart, Top 5 Weak Keys, and recent sessions.
+    """
+    curses.curs_set(0)
+    stdscr.nodelay(False)
+
+    while True:
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
+
+        active_user = stats_manager.get_active_user()
+        data = stats_manager.load_history()
+        summary = data.get("summary", {})
+        sessions = data.get("sessions", [])
+        metrics = stats_manager.compute_metrics(sessions)
+        weak_keys = stats_manager.get_top_weak_keys(top_n=5)
+
+        title_user = f"PROFILE: {active_user.upper()}" if active_user else "DEMO MODE (GUEST)"
+        title = f"=== TYPING STATS & PROGRESS DASHBOARD ({title_user}) ==="
+        safe_addstr(stdscr, 1, max(0, (w - len(title)) // 2), title, curses.color_pair(3) | curses.A_BOLD)
+
+        if stats_manager.is_demo_mode():
+            demo_note = "[DEMO MODE ACTIVE] Statistics and weak keys are not saved in Demo mode."
+            safe_addstr(stdscr, 3, max(0, (w - len(demo_note)) // 2), demo_note, curses.color_pair(6) | curses.A_BOLD)
+            hint = "Log in or create a profile to track your stats and identify weak keys!"
+            safe_addstr(stdscr, 5, max(0, (w - len(hint)) // 2), hint, curses.color_pair(4))
+            prompt = "[U] Login / Create Profile   |   [ESC / ENTER] Back to Menu"
+            safe_addstr(stdscr, h - 2, max(0, (w - len(prompt)) // 2), prompt, curses.color_pair(3) | curses.A_BOLD)
+            stdscr.refresh()
+
+            ch = stdscr.getch()
+            if ch in (ord("u"), ord("U")):
+                if auth_screen(stdscr):
+                    continue
+                return
+            elif ch in (27, 10, 13, curses.KEY_ENTER, ord("b"), ord("B"), ord("q"), ord("Q")):
+                return
+            continue
+
+        # Overview cards
+        total_sec = summary.get("total_time_seconds", 0.0)
+        mins = int(total_sec // 60)
+        secs = int(total_sec % 60)
+
+        ao5_str = f"{metrics['ao5']} WPM" if metrics["ao5"] is not None else "N/A (need 5)"
+        ao10_str = f"{metrics['ao10']} WPM" if metrics["ao10"] is not None else "N/A (need 10)"
+
+        line1 = f"Tests: {metrics['total_tests']}   |   Words: {summary.get('total_words', 0)}   |   Practice Time: {mins}m {secs}s"
+        line2 = f"Best Speed: {metrics['best_wpm']} WPM   |   Avg Speed: {metrics['avg_wpm']} WPM   |   Best Acc: {metrics['best_acc']:.1f}%"
+        line3 = f"Rolling Averages:  Ao5 = {ao5_str}   |   Ao10 = {ao10_str}"
+
+        safe_addstr(stdscr, 3, max(2, (w - len(line1)) // 2), line1, curses.color_pair(4))
+        safe_addstr(stdscr, 4, max(2, (w - len(line2)) // 2), line2, curses.color_pair(5) | curses.A_BOLD)
+        safe_addstr(stdscr, 5, max(2, (w - len(line3)) // 2), line3, curses.color_pair(3))
+
+        # TOP 5 WEAKEST KEYS SECTION
+        curr_y = 7
+        weak_header = "-- Top 5 Weakest Keys (Most Mistakes) --"
+        safe_addstr(stdscr, curr_y, max(2, (w - len(weak_header)) // 2), weak_header, curses.color_pair(2) | curses.A_BOLD)
+        curr_y += 1
+
+        if weak_keys:
+            total_mistakes = sum(data.get("weak_keys", {}).values())
+            items = []
+            for rank, (k, err_cnt) in enumerate(weak_keys, 1):
+                pct = (err_cnt / total_mistakes) * 100 if total_mistakes else 0.0
+                items.append(f"#{rank} {stats_manager.format_key_name(k)}: {err_cnt} ({pct:.0f}%)")
+            weak_line = "   ".join(items)
+            safe_addstr(stdscr, curr_y, max(2, (w - len(weak_line)) // 2), weak_line, curses.color_pair(5))
+        else:
+            no_weak = "[ No mistakes recorded yet! Take more tests to diagnose weak keys ]"
+            safe_addstr(stdscr, curr_y, max(2, (w - len(no_weak)) // 2), no_weak, curses.color_pair(4))
+        curr_y += 2
+
+        # Speed Trend Chart
+        chart_header = "-- Recent Speed Trend --"
+        safe_addstr(stdscr, curr_y, max(2, (w - len(chart_header)) // 2), chart_header, curses.color_pair(4) | curses.A_UNDERLINE)
+        curr_y += 1
+
+        chart_max_pts = min(12, max(4, (w - 18) // 3))
+        chart_lines = stats_manager.generate_ascii_chart(sessions, max_points=chart_max_pts, height=4)
+        for c_idx, c_line in enumerate(chart_lines):
+            safe_addstr(stdscr, curr_y + c_idx, max(2, (w - len(c_line)) // 2), c_line, curses.color_pair(4))
+
+        chart_bottom_y = curr_y + len(chart_lines)
+
+        # Recent sessions table (last 3)
+        if h > chart_bottom_y + 6:
+            cols_header = " Date & Time       Mode               WPM      Acc %    Time     PB "
+            safe_addstr(stdscr, chart_bottom_y + 1, max(2, (w - len(cols_header)) // 2), cols_header, curses.color_pair(5) | curses.A_BOLD)
+
+            max_show = min(3, h - chart_bottom_y - 4)
+            for idx, s in enumerate(sessions[-max_show:]):
+                mode = f"{s.get('diff_name', '')[:6]} ({s.get('length_name', '')[:6]})"
+                pb_tag = "[PB]" if s.get("is_pb") else "    "
+                row_str = f" {s.get('timestamp', ''):<17} {mode:<18} {s.get('wpm', 0):<8} {s.get('accuracy', 0.0):.1f}%    {s.get('elapsed_seconds', 0.0):.1f}s    {pb_tag} "
+                safe_addstr(stdscr, chart_bottom_y + 2 + idx, max(2, (w - len(row_str)) // 2), row_str, curses.color_pair(4))
+
+        # Footer controls
+        prompt = "[C] Clear My Stats   |   [U] Switch Profile   |   [ESC / ENTER] Back to Menu"
+        safe_addstr(stdscr, h - 2, max(0, (w - len(prompt)) // 2), prompt, curses.color_pair(3) | curses.A_BOLD)
+
+        stdscr.refresh()
+        ch = stdscr.getch()
+
+        if ch in (27, 10, 13, curses.KEY_ENTER, ord("b"), ord("B"), ord("q"), ord("Q")):
+            return
+        elif ch in (ord("u"), ord("U")):
+            if auth_screen(stdscr):
+                continue
+            return
+        elif ch in (ord("c"), ord("C")):
+            confirm_msg = f"Clear stats for profile '{active_user}'? [Y / N]: "
+            safe_addstr(stdscr, h - 2, max(0, (w - len(confirm_msg)) // 2), confirm_msg, curses.color_pair(2) | curses.A_BOLD)
+            stdscr.refresh()
+            conf_ch = stdscr.getch()
+            if conf_ch in (ord("y"), ord("Y")):
+                stats_manager.clear_history()
+
 
 def run_test(stdscr, diff_key, length_key):
     diff_name = DATASET[diff_key]["name"]
@@ -396,6 +671,7 @@ def run_test(stdscr, diff_key, length_key):
     start_time = None
     errors = 0
     total_keystrokes = 0
+    errors_by_char = {}  # Tracks which characters were stumbled upon!
 
     stdscr.nodelay(True)
 
@@ -422,7 +698,7 @@ def run_test(stdscr, diff_key, length_key):
             total_rows,
             wpm,
             accuracy,
-            elapsed_time
+            elapsed_time,
         )
 
         if len(current_text) == len(target_text):
@@ -436,7 +712,8 @@ def run_test(stdscr, diff_key, length_key):
                 accuracy,
                 elapsed_time,
                 len(current_text),
-                errors
+                errors,
+                errors_by_char,
             )
             return action
 
@@ -466,28 +743,42 @@ def run_test(stdscr, diff_key, length_key):
             expected_char = target_text[len(current_text)]
             if typed_char != expected_char:
                 errors += 1
+                # Track the stumbled character!
+                errors_by_char[expected_char] = errors_by_char.get(expected_char, 0) + 1
+
             total_keystrokes += 1
             current_text.append(typed_char)
+
 
 def main(stdscr):
     curses.use_default_colors()
     curses.init_pair(1, curses.COLOR_GREEN, -1)   # Correct character
-    curses.init_pair(2, curses.COLOR_RED, -1)     # Incorrect character
+    curses.init_pair(2, curses.COLOR_RED, -1)     # Incorrect character / alerts
     curses.init_pair(3, curses.COLOR_CYAN, -1)    # Title & highlights
     curses.init_pair(4, curses.COLOR_WHITE, -1)   # Target text & general UI
-    curses.init_pair(5, curses.COLOR_YELLOW, -1)  # Selected / Stats
+    curses.init_pair(5, curses.COLOR_YELLOW, -1)  # Selected / Stats / PBs
+    curses.init_pair(6, curses.COLOR_MAGENTA, -1) # Demo mode badge
+
+    # Step 0: Welcome / Auth screen (Login, Create User, Demo)
+    if not auth_screen(stdscr):
+        return  # User pressed ESC to quit
 
     diff_choice = None
     length_choice = None
 
     while True:
-        # Step 1: Select Difficulty or Stats
+        # Step 1: Select Difficulty or Stats or Switch User
         if diff_choice is None:
             diff_choice = difficulty_menu(stdscr)
             if diff_choice is None:
                 break  # Exit
             if diff_choice == "stats":
                 stats_dashboard(stdscr)
+                diff_choice = None
+                continue
+            if diff_choice == "switch_user":
+                if not auth_screen(stdscr):
+                    break
                 diff_choice = None
                 continue
 
@@ -508,15 +799,18 @@ def main(stdscr):
         elif action == "again":
             continue
 
+
 def cli():
     if len(sys.argv) > 1 and sys.argv[1].lower() in ("--stats", "-s", "stats"):
-        stats_manager.print_cli_stats()
+        target = sys.argv[2] if len(sys.argv) > 2 else None
+        stats_manager.print_cli_stats(target)
         return
 
     try:
         wrapper(main)
     except KeyboardInterrupt:
         pass
+
 
 if __name__ == "__main__":
     cli()

@@ -66,19 +66,30 @@ For every difficulty level, you can choose the text length:
   - Red for errors.
   - Underline indicator on the active cursor character.
 
-### 4. Progress Tracking & Personal Bests (Terminal-Native)
+### 4. 👤 Multi-User Profiles & Demo Mode
+- **Multi-User on Same Computer**: When the app opens, choose **[1] Login**, **[2] Create Profile**, or **[3] Demo Mode**.
+- **Password Protected**: Simple, salted SHA-256 password hashing keeps individual stats separate and private.
+- **Demo / Guest Mode**: Instant practice with live HUD and results without saving any stats to the database.
+- **Switch Profiles Anytime**: Press `[U]` from the main menu or stats dashboard to switch users instantly.
+
+### 5. 🎯 Weak Keys & Stumble Analysis (Learn & Improve)
+- **Automatic Mistake Tracking**: Tracks every character you stumble or make errors on during tests.
+- **Top 5 Weakest Keys**: Analyzes your error patterns and ranks the top 5 keys with total error counts and percentages.
+- **Actionable Advice**: Highlights exactly which keys need practice so you can slow down on them and boost accuracy.
+
+### 6. 📊 Progress Tracking & Personal Bests (Terminal-Native)
 - **Automatic History Tracking**: Every completed test is recorded locally with speed, accuracy, duration, and errors.
 - **Personal Best (PB) Alerts**: Celebratory highlight whenever you set a new WPM record in any difficulty and length mode.
 - **Rolling Averages (Ao5 & Ao10)**: Standard speedcubing/typing benchmarks calculating your average of the last 5 and 10 tests.
 - **In-Terminal Speed Trend Chart**: Visual ASCII trend graph and sparkline directly inside your terminal.
-- **Dedicated Stats Dashboard**: Press `[S]` on the main menu to view all-time personal bests, total words typed, total practice time, and session history.
+- **Dedicated Stats Dashboard**: Press `[S]` on the main menu to view all-time personal bests, top weak keys, total practice time, and session history.
 - **CLI Quick Stats**: Run `typer --stats` or `python typer.py --stats` for an instant terminal summary without opening the game.
 
-### 5. Full Keyboard Controls
+### 7. Full Keyboard Controls
 - Backspace support for corrections.
-- Arrow keys / numbers for smooth 2-step menu selection.
+- Arrow keys / numbers for smooth menu selection.
 - ESC to navigate back or exit anytime.
-- Results screen displaying final WPM, accuracy, time taken, total characters typed, error count, and lifetime average comparison.
+- Results screen displaying final WPM, accuracy, time taken, total characters typed, error count, session stumbles, and top weak keys.
 
 ---
 
