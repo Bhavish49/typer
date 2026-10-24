@@ -14,17 +14,17 @@ from pathlib import Path
 def get_history_file_path() -> Path:
     """
     Returns the path to the history file.
-    Prefers user's home directory (~/.typen_history.json) so progress persists
+    Prefers user's home directory (~/.typer_history.json) so progress persists
     across any folder or global CLI invocation. Falls back to local directory.
     """
     try:
-        home_path = Path.home() / ".typen_history.json"
-        old_path = Path.home() / ".typer_history.json"
+        home_path = Path.home() / ".typer_history.json"
+        typen_path = Path.home() / ".typen_history.json"
 
-        # Auto-migrate from previous name if available
-        if not home_path.exists() and old_path.exists():
+        # Migrate if typen history exists and typer does not
+        if not home_path.exists() and typen_path.exists():
             try:
-                home_path.write_text(old_path.read_text(encoding="utf-8"), encoding="utf-8")
+                home_path.write_text(typen_path.read_text(encoding="utf-8"), encoding="utf-8")
             except Exception:
                 pass
 

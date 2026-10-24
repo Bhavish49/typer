@@ -7,14 +7,14 @@ setup(
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
     author="Bhavish",
-    py_modules=["typen", "stats_manager"],
+    py_modules=["typer", "stats_manager"],
     install_requires=[
         "windows-curses; sys_platform == 'win32'",
     ],
     entry_points={
         "console_scripts": [
-            "typen=typen:cli",
-            "speedtyper=typen:cli",
+            "typer=typer:cli",
+            "speedtyper=typer:cli",
         ],
     },
     classifiers=[

@@ -1,4 +1,4 @@
-# Typen - Terminal Speed Typing Test
+# Typer - Terminal Speed Typing Test
 
 A sleek, interactive terminal-based typing speed test application built with Python and `curses`.
 
@@ -12,6 +12,8 @@ A sleek, interactive terminal-based typing speed test application built with Pyt
 pip install git+https://github.com/Bhavish49/typer.git
 ```
 
+> ⚠️ **Important:** Always use the full command above. Do **NOT** run bare `pip install typer` (which downloads an unrelated Python CLI library from PyPI).
+
 > **If `pip` is not recognized**, try one of these instead:
 > ```bash
 > python -m pip install git+https://github.com/Bhavish49/typer.git
@@ -23,7 +25,7 @@ pip install git+https://github.com/Bhavish49/typer.git
 **Step 2:** Launch the game from anywhere:
 
 ```bash
-typen
+typer
 ```
 *(or `speedtyper`)*
 
@@ -31,7 +33,7 @@ That's it! The typing test opens instantly.
 
 **View your progress anytime:**
 ```bash
-typen --stats
+typer --stats
 ```
 
 ---
@@ -70,7 +72,7 @@ For every difficulty level, you can choose the text length:
 - **Rolling Averages (Ao5 & Ao10)**: Standard speedcubing/typing benchmarks calculating your average of the last 5 and 10 tests.
 - **In-Terminal Speed Trend Chart**: Visual ASCII trend graph and sparkline directly inside your terminal.
 - **Dedicated Stats Dashboard**: Press `[S]` on the main menu to view all-time personal bests, total words typed, total practice time, and session history.
-- **CLI Quick Stats**: Run `typen --stats` or `python typen.py --stats` for an instant terminal summary without opening the game.
+- **CLI Quick Stats**: Run `typer --stats` or `python typer.py --stats` for an instant terminal summary without opening the game.
 
 ### 5. Full Keyboard Controls
 - Backspace support for corrections.
@@ -107,12 +109,12 @@ cd typer
 pip install -e .
 
 # Run via command or script
-typen
+typer
 # or:
-python typen.py
+python typer.py
 ```
 
-> **Troubleshooting:** If `pip` or `python` is not recognized, you need to [add Python to your PATH](https://realpython.com/add-python-to-path/). On Windows, you can also try `py -m pip install -e .` and `py typen.py`.
+> **Troubleshooting:** If `pip` or `python` is not recognized, you need to [add Python to your PATH](https://realpython.com/add-python-to-path/). On Windows, you can also try `py -m pip install -e .` and `py typer.py`.
 
 ---
 
