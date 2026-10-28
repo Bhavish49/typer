@@ -122,6 +122,23 @@ def _load_raw_data() -> dict:
                     }
                 }
                 return migrated
+
+            # Normalize all username keys and 'username' fields to lowercase
+            users = data.get("users", {})
+            if isinstance(users, dict):
+                norm_users = {}
+                for k, udata in users.items():
+                    norm_k = str(k).lower().strip()
+                    if isinstance(udata, dict):
+                        udata["username"] = norm_k
+                    norm_users[norm_k] = udata
+                data["users"] = norm_users
+
+            if "last_user" in data and isinstance(data["last_user"], str):
+                data["last_user"] = data["last_user"].lower().strip()
+            if "recent_users" in data and isinstance(data["recent_users"], list):
+                data["recent_users"] = [str(u).lower().strip() for u in data["recent_users"] if isinstance(u, str)]
+
             return data
     except Exception:
         return {"version": 2, "users": {}}
@@ -140,14 +157,14 @@ def _save_raw_data(data: dict) -> bool:
 
 
 def list_users() -> list[str]:
-    """Returns a list of all registered profile usernames."""
+    """Returns a list of all registered profile usernames (lowercase)."""
     data = _load_raw_data()
     users = data.get("users", {})
-    return sorted([info.get("username", k) for k, info in users.items()])
+    return sorted([k.lower() for k in users.keys()])
 
 
 def user_exists(username: str) -> bool:
-    """Checks if a user profile exists (case-insensitive)."""
+    """Checks if a user profile exists (case-insensitive, matched as lowercase)."""
     if not username:
         return False
     data = _load_raw_data()
@@ -157,23 +174,23 @@ def user_exists(username: str) -> bool:
 def create_user(username: str, password: str) -> tuple[bool, str]:
     """
     Creates a new user profile with password authentication.
+    Usernames are strictly small letters (lowercase a-z, 0-9, and _).
     Returns (success, message).
     """
-    clean_username = username.strip()
+    clean_username = username.strip().lower()
     if len(clean_username) < 2:
         return False, "Username must be at least 2 characters long."
     if len(clean_username) > 20:
         return False, "Username must be 20 characters or fewer."
     if not clean_username.replace("_", "").isalnum():
-        return False, "Username can only contain letters, numbers, and underscores."
-    if clean_username.lower() in ("demo", "guest", "__demo__"):
+        return False, "Username can only contain small letters, numbers, and underscores."
+    if clean_username in ("demo", "guest", "__demo__"):
         return False, "Username 'demo' and 'guest' are reserved for Demo Mode."
 
     data = _load_raw_data()
     users = data.setdefault("users", {})
-    key = clean_username.lower()
 
-    if key in users:
+    if clean_username in users:
         return False, f"Username '{clean_username}' already exists. Please log in."
 
     salt = secrets.token_hex(8)
@@ -191,8 +208,11 @@ def create_user(username: str, password: str) -> tuple[bool, str]:
         user_data["sessions"] = legacy.get("sessions", user_data["sessions"])
         user_data["weak_keys"] = legacy.get("weak_keys", {})
 
-    users[key] = user_data
+    users[clean_username] = user_data
     data["last_user"] = clean_username
+    recent = [u for u in data.get("recent_users", []) if isinstance(u, str) and u.lower() != clean_username]
+    recent.insert(0, clean_username)
+    data["recent_users"] = recent[:10]
     _save_raw_data(data)
 
     set_active_user(clean_username)
@@ -204,31 +224,77 @@ def authenticate(username: str, password: str) -> tuple[bool, str]:
     Verifies user credentials.
     Returns (success, message).
     """
-    clean_username = username.strip()
-    key = clean_username.lower()
+    clean_username = username.strip().lower()
     data = _load_raw_data()
     users = data.get("users", {})
 
-    if key not in users:
+    if clean_username not in users:
         return False, f"User '{clean_username}' not found. Please create a profile first."
 
-    user_info = users[key]
+    user_info = users[clean_username]
     salt = user_info.get("salt", "")
     expected_hash = user_info.get("password_hash", "")
 
     if _hash_password(password, salt) != expected_hash:
         return False, "Incorrect password. Please try again."
 
-    set_active_user(user_info.get("username", clean_username))
-    data["last_user"] = user_info.get("username", clean_username)
+    uname = clean_username
+    set_active_user(uname)
+    data["last_user"] = uname
+
+    # Track recently logged in users (most recent first, up to 10)
+    recent = [u for u in data.get("recent_users", []) if isinstance(u, str) and u.lower() != uname]
+    recent.insert(0, uname)
+    data["recent_users"] = recent[:10]
     _save_raw_data(data)
-    return True, f"Welcome back, {user_info.get('username', clean_username)}!"
+    return True, f"Welcome back, {uname}!"
 
 
 def get_last_active_user() -> str | None:
     """Returns the username of the user who logged in most recently."""
     data = _load_raw_data()
     return data.get("last_user")
+
+
+def get_recent_users(limit: int = 3) -> list[str]:
+    """
+    Returns up to `limit` recently logged in usernames.
+    Prioritizes actively logged-in users, falling back to other registered profiles.
+    """
+    data = _load_raw_data()
+    users = data.get("users", {})
+    all_users = {k.lower(): info.get("username", k) for k, info in users.items()}
+    if not all_users:
+        return []
+
+    recent_list = data.get("recent_users", [])
+    if not isinstance(recent_list, list):
+        recent_list = []
+
+    last_user = data.get("last_user")
+    if last_user and last_user not in recent_list:
+        recent_list.insert(0, last_user)
+
+    result = []
+    seen = set()
+
+    for u in recent_list:
+        if isinstance(u, str):
+            k = u.lower()
+            if k in all_users and k not in seen:
+                result.append(all_users[k])
+                seen.add(k)
+                if len(result) >= limit:
+                    return result
+
+    for k, uname in sorted(all_users.items()):
+        if k not in seen:
+            result.append(uname)
+            seen.add(k)
+            if len(result) >= limit:
+                break
+
+    return result
 
 
 def load_history(username: str | None = None) -> dict:

@@ -45,11 +45,12 @@ def layout_text(text, max_width):
     return char_positions, total_rows
 
 
-def prompt_text_input(stdscr, y, x, prompt_label, is_password=False, max_len=20) -> str | None:
+def prompt_text_input(stdscr, y, x, prompt_label, is_password=False, max_len=20, lower_only=False) -> str | None:
     """
     Interactive single-line text input field in curses.
     Supports typing, backspace, Enter (confirm), and ESC (cancel).
     Masks with '*' if is_password is True.
+    If lower_only is True, enforces strictly small letters (lowercase a-z, 0-9, _).
     """
     curses.curs_set(1)
     stdscr.nodelay(False)
@@ -68,22 +69,206 @@ def prompt_text_input(stdscr, y, x, prompt_label, is_password=False, max_len=20)
             return None
         elif ch in (10, 13, curses.KEY_ENTER):
             curses.curs_set(0)
-            return "".join(buffer).strip()
+            raw = "".join(buffer).strip()
+            return raw.lower() if lower_only else raw
         elif ch in (curses.KEY_BACKSPACE, 8, 127):
             if buffer:
                 buffer.pop()
         elif 32 <= ch <= 126 and len(buffer) < max_len:
-            buffer.append(chr(ch))
+            char_to_add = chr(ch).lower() if lower_only else chr(ch)
+            buffer.append(char_to_add)
+
+
+def draw_selection_row(stdscr, y, x, key_badge, label, desc, is_selected, row_width=72):
+    """
+    Renders an unmistakable, high-contrast, light-colored menu item for arrow-key navigation.
+    Selected state features:
+      - Crisp, light White background bar with sharp Black text (color_pair 7)
+      - Bold ' ► ' pointer on the left and ' ◄' on the right
+      - Distinct uppercase title and clear bullet separator
+    Unselected state features:
+      - Clean White text (color_pair 4) with standard styling
+    """
+    pointer_left = " ► " if is_selected else "   "
+    pointer_right = " ◄" if is_selected else "  "
+    display_title = label.upper() if is_selected else label
+    badge_str = f"[{key_badge}]"
+
+    # Assemble line components
+    left_part = f"{pointer_left}{badge_str}  {display_title}"
+    separator = "  •  " if is_selected else "  -  "
+
+    align_col = min(22, max(14, row_width // 3))
+    if len(left_part) < align_col:
+        left_part = left_part + " " * (align_col - len(left_part))
+
+    combined = f"{left_part}{separator}{desc}"
+
+    # Pad or truncate to ensure uniform full-width highlight bar without overflow
+    target_len = max(10, row_width - len(pointer_right))
+    if len(combined) < target_len:
+        combined = combined + " " * (target_len - len(combined))
+    else:
+        combined = combined[:target_len]
+
+    full_line = f"{combined}{pointer_right}"
+
+    if is_selected:
+        try:
+            # Pair 7: 100% completely black text on bright light-white background (no A_BOLD so text stays deep black)
+            attr = curses.color_pair(7)
+        except Exception:
+            attr = curses.A_REVERSE
+    else:
+        attr = curses.color_pair(4)
+
+    safe_addstr(stdscr, y, x, full_line, attr)
+
+
+def _browse_all_profiles_menu(stdscr, registered_users: list[str]) -> str | None:
+    """Helper to browse all registered profiles if there are more than 3."""
+    curses.curs_set(0)
+    stdscr.nodelay(False)
+    selected_idx = 0
+    options = list(registered_users) + ["[+] Type Username Manually"]
+
+    while True:
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
+
+        title = "=== ALL REGISTERED PROFILES ==="
+        subtitle = "Use [UP / DOWN] & [ENTER] to select, or [ESC] to go back"
+        safe_addstr(stdscr, max(1, h // 2 - 8), max(0, (w - len(title)) // 2), title, curses.color_pair(3) | curses.A_BOLD)
+        safe_addstr(stdscr, max(2, h // 2 - 6), max(0, (w - len(subtitle)) // 2), subtitle, curses.color_pair(4))
+
+        box_w = min(74, max(46, w - 6))
+        start_x = max(2, (w - box_w) // 2)
+        start_y = max(4, h // 2 - 3)
+
+        max_visible = min(len(options), 6)
+        top_idx = max(0, min(selected_idx - max_visible // 2, len(options) - max_visible))
+
+        for display_i, opt_i in enumerate(range(top_idx, top_idx + max_visible)):
+            opt = options[opt_i]
+            y = start_y + (display_i * 2)
+            is_selected = (opt_i == selected_idx)
+            badge = str(opt_i + 1) if opt_i < 9 else "*"
+            desc = "Registered user profile" if opt != "[+] Type Username Manually" else "Enter custom username"
+            draw_selection_row(stdscr, y, start_x, badge, opt, desc, is_selected, box_w)
+
+        footer = "Use [UP / DOWN] & [ENTER] to select, or [ESC] to go back"
+        safe_addstr(stdscr, h - 2, max(0, (w - len(footer)) // 2), footer, curses.color_pair(3))
+
+        stdscr.refresh()
+        ch = stdscr.getch()
+
+        if ch == 27:
+            return None
+        elif ch in (curses.KEY_UP, ord("k"), ord("K")):
+            selected_idx = (selected_idx - 1) % len(options)
+        elif ch in (curses.KEY_DOWN, ord("j"), ord("J")):
+            selected_idx = (selected_idx + 1) % len(options)
+        elif ch in (10, 13, curses.KEY_ENTER):
+            chosen = options[selected_idx]
+            return "" if chosen == "[+] Type Username Manually" else chosen
+
+
+def select_profile_menu(stdscr, registered_users: list[str]) -> str | None:
+    """
+    Interactive profile picker for login showing up to 3 recently logged in users.
+    Allows instant selection via 1, 2, 3 or Up/Down arrows and Enter.
+    Also provides options to type username manually or browse all profiles.
+    Returns:
+      - chosen username string (e.g. 'alice')
+      - '' (empty string) if user wants to type username manually
+      - None if user pressed ESC to cancel back to main menu
+    """
+    curses.curs_set(0)
+    stdscr.nodelay(False)
+
+    recent_users = stats_manager.get_recent_users(limit=3)
+    if not recent_users:
+        return ""
+
+    # Build menu options showing 3 recently logged in users
+    menu_options = []
+    for i, uname in enumerate(recent_users):
+        badge = str(i + 1)
+        desc = "Most recent login" if i == 0 else "Recently logged in profile"
+        menu_options.append((badge, uname, desc, uname))
+
+    # Option to type username manually
+    menu_options.append(("+", "Type Other Username", "Log in with a different username", ""))
+
+    # If more than 3 registered profiles exist, offer 'Browse All'
+    other_users = [u for u in registered_users if u.lower() not in [r.lower() for r in recent_users]]
+    if other_users:
+        menu_options.append(("A", "Browse All Profiles", f"Choose from all {len(registered_users)} registered profiles", "__all__"))
+
+    menu_options.append(("<", "Back to Menu", "Return to main welcome screen", "__back__"))
+
+    selected_idx = 0
+
+    while True:
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
+
+        title = "=== USER LOGIN - RECENT PROFILES ==="
+        subtitle = "Select a profile below using [UP / DOWN] & [ENTER], or press [1-3]"
+        safe_addstr(stdscr, max(1, h // 2 - 8), max(0, (w - len(title)) // 2), title, curses.color_pair(3) | curses.A_BOLD)
+        safe_addstr(stdscr, max(2, h // 2 - 6), max(0, (w - len(subtitle)) // 2), subtitle, curses.color_pair(4))
+
+        box_w = min(74, max(46, w - 6))
+        start_x = max(2, (w - box_w) // 2)
+        start_y = max(4, h // 2 - 3)
+
+        for idx, (badge, label, desc, _) in enumerate(menu_options):
+            y = start_y + (idx * 2)
+            draw_selection_row(stdscr, y, start_x, badge, label, desc, idx == selected_idx, box_w)
+
+        footer = "Press [1-3] to select user, [T] to type, [UP / DOWN] & [ENTER], or [ESC] to back"
+        safe_addstr(stdscr, h - 2, max(0, (w - len(footer)) // 2), footer, curses.color_pair(3))
+
+        stdscr.refresh()
+        ch = stdscr.getch()
+
+        if ch == 27:  # ESC cancels
+            return None
+        elif ch in (curses.KEY_UP, ord("k"), ord("K")):
+            selected_idx = (selected_idx - 1) % len(menu_options)
+        elif ch in (curses.KEY_DOWN, ord("j"), ord("J")):
+            selected_idx = (selected_idx + 1) % len(menu_options)
+        elif ord("1") <= ch <= ord("3"):
+            user_idx = ch - ord("1")
+            if user_idx < len(recent_users):
+                return recent_users[user_idx]
+        elif ch in (ord("+"), ord("t"), ord("T")):
+            return ""  # type manually
+        elif ch in (ord("a"), ord("A")) and other_users:
+            all_choice = _browse_all_profiles_menu(stdscr, registered_users)
+            if all_choice is not None:
+                return all_choice
+        elif ch in (10, 13, curses.KEY_ENTER):
+            chosen_action = menu_options[selected_idx][3]
+            if chosen_action == "__all__":
+                all_choice = _browse_all_profiles_menu(stdscr, registered_users)
+                if all_choice is not None:
+                    return all_choice
+            elif chosen_action == "__back__":
+                return None
+            else:
+                return chosen_action
 
 
 def auth_screen(stdscr) -> bool:
     """
     Screen 0: Welcome & User Profile Selection.
+    Uses vibrant, high-contrast arrow-key navigation (Up/Down) and Enter to select.
     Options:
-      [1] Login (Existing User)
-      [2] Create New Profile
-      [3] Demo Mode (No stats saved)
-      [ESC] Quit
+      1. Login (Existing User)
+      2. Create New Profile
+      3. Demo Mode (No stats saved)
+      4. Quit
     Returns True if user logged in or entered Demo mode, False to quit.
     """
     curses.curs_set(0)
@@ -91,6 +276,14 @@ def auth_screen(stdscr) -> bool:
 
     message = ""
     message_color = curses.color_pair(5)
+    selected_idx = 0
+
+    options = [
+        ("1", "Login", "Select existing profile & password"),
+        ("2", "Create Profile", "Create new profile with password"),
+        ("3", "Demo Mode", "Practice typing without saving stats"),
+        ("4", "Quit", "Exit the speed typing application"),
+    ]
 
     while True:
         stdscr.erase()
@@ -106,56 +299,101 @@ def auth_screen(stdscr) -> bool:
         user_count_str = f"Registered Profiles: {len(registered_users)}"
         safe_addstr(stdscr, max(3, h // 2 - 4), max(0, (w - len(user_count_str)) // 2), user_count_str, curses.color_pair(5))
 
-        options = [
-            ("[1] Login", "Select an existing user profile and enter password"),
-            ("[2] Create Profile", "Create a new profile with username & password"),
-            ("[3] Demo Mode", "Practice without recording statistics or weak keys"),
-            ("[ESC] Quit", "Exit the application"),
-        ]
-
+        box_w = min(74, max(46, w - 6))
+        start_x = max(2, (w - box_w) // 2)
         start_y = max(5, h // 2 - 2)
-        for idx, (label, desc) in enumerate(options):
-            line = f"  {label:<18} - {desc}"
-            attr = curses.color_pair(5) | curses.A_BOLD if idx == 0 else curses.color_pair(4)
-            safe_addstr(stdscr, start_y + (idx * 2), max(2, (w - 70) // 2), line, attr)
+
+        for idx, (key, label, desc) in enumerate(options):
+            y = start_y + (idx * 2)
+            draw_selection_row(stdscr, y, start_x, key, label, desc, idx == selected_idx, box_w)
 
         if message:
-            safe_addstr(stdscr, start_y + len(options) * 2 + 1, max(0, (w - len(message)) // 2), message, message_color | curses.A_BOLD)
+            msg_y = start_y + len(options) * 2 + 1
+            safe_addstr(stdscr, msg_y, max(0, (w - len(message)) // 2), message, message_color | curses.A_BOLD)
 
-        footer = "Press [1], [2], [3], or [ESC]"
+        footer = "Use [UP / DOWN] & [ENTER] to select, press [1-4], or [ESC] to exit"
         safe_addstr(stdscr, h - 2, max(0, (w - len(footer)) // 2), footer, curses.color_pair(3))
 
         stdscr.refresh()
         ch = stdscr.getch()
 
+        chosen = None
         if ch == 27:  # ESC
             return False
+        elif ch in (curses.KEY_UP, ord("k"), ord("K")):
+            selected_idx = (selected_idx - 1) % len(options)
+            continue
+        elif ch in (curses.KEY_DOWN, ord("j"), ord("J")):
+            selected_idx = (selected_idx + 1) % len(options)
+            continue
+        elif ch in (ord("1"), ord("l"), ord("L")):
+            selected_idx = 0
+            chosen = "Login"
+        elif ch in (ord("2"), ord("c"), ord("C")):
+            selected_idx = 1
+            chosen = "Create Profile"
+        elif ch in (ord("3"), ord("d"), ord("D")):
+            selected_idx = 2
+            chosen = "Demo Mode"
+        elif ch in (ord("4"), ord("q"), ord("Q")):
+            selected_idx = 3
+            chosen = "Quit"
+        elif ch in (10, 13, curses.KEY_ENTER):
+            chosen = options[selected_idx][1]
+        else:
+            continue
 
-        elif ch in (ord("1"),):
-            # Login
+        if chosen == "Quit":
+            return False
+
+        elif chosen == "Demo Mode":
+            stats_manager.set_demo_mode()
+            return True
+
+        elif chosen == "Login":
             if not registered_users:
-                message = "No profiles found yet! Press [2] to create your first profile."
+                message = "No profiles found yet! Select 'Create Profile' first."
                 message_color = curses.color_pair(5)
                 continue
 
-            # Prompt username
-            stdscr.erase()
-            login_title = "=== USER LOGIN ==="
-            safe_addstr(stdscr, max(1, h // 2 - 6), max(0, (w - len(login_title)) // 2), login_title, curses.color_pair(3) | curses.A_BOLD)
-
-            users_preview = "Available profiles: " + ", ".join(registered_users[:8])
-            safe_addstr(stdscr, max(2, h // 2 - 4), max(0, (w - len(users_preview)) // 2), users_preview, curses.color_pair(4))
-
-            input_y = max(4, h // 2 - 1)
-            input_x = max(2, (w - 36) // 2)
-
-            username = prompt_text_input(stdscr, input_y, input_x, "Username", is_password=False)
-            if not username:
+            # Interactive profile selector with Up/Down arrow navigation
+            target_user = select_profile_menu(stdscr, registered_users)
+            if target_user is None:
                 message = "Login cancelled."
                 message_color = curses.color_pair(4)
                 continue
 
-            password = prompt_text_input(stdscr, input_y + 2, input_x, "Password", is_password=True)
+            username = target_user
+            if username == "":
+                # Manual username prompt
+                stdscr.erase()
+                login_title = "=== USER LOGIN ==="
+                safe_addstr(stdscr, max(1, h // 2 - 6), max(0, (w - len(login_title)) // 2), login_title, curses.color_pair(3) | curses.A_BOLD)
+
+                users_preview = "Available profiles: " + ", ".join(registered_users[:8])
+                safe_addstr(stdscr, max(2, h // 2 - 4), max(0, (w - len(users_preview)) // 2), users_preview, curses.color_pair(4))
+
+                input_y = max(4, h // 2 - 1)
+                input_x = max(2, (w - 36) // 2)
+
+                username = prompt_text_input(stdscr, input_y, input_x, "Username (small letters)", is_password=False, lower_only=True)
+                if not username:
+                    message = "Login cancelled."
+                    message_color = curses.color_pair(4)
+                    continue
+
+            # Prompt password for selected user
+            stdscr.erase()
+            login_title = "=== USER LOGIN ==="
+            safe_addstr(stdscr, max(1, h // 2 - 6), max(0, (w - len(login_title)) // 2), login_title, curses.color_pair(3) | curses.A_BOLD)
+
+            user_badge = f"Profile: [ {username.lower()} ]"
+            safe_addstr(stdscr, max(2, h // 2 - 4), max(0, (w - len(user_badge)) // 2), user_badge, curses.color_pair(5) | curses.A_BOLD)
+
+            input_y = max(4, h // 2 - 1)
+            input_x = max(2, (w - 36) // 2)
+
+            password = prompt_text_input(stdscr, input_y, input_x, "Password", is_password=True)
             if password is None:
                 message = "Login cancelled."
                 message_color = curses.color_pair(4)
@@ -168,19 +406,18 @@ def auth_screen(stdscr) -> bool:
                 message = f"Error: {res_msg}"
                 message_color = curses.color_pair(2)
 
-        elif ch in (ord("2"),):
-            # Create Profile
+        elif chosen == "Create Profile":
             stdscr.erase()
             create_title = "=== CREATE NEW PROFILE ==="
             safe_addstr(stdscr, max(1, h // 2 - 6), max(0, (w - len(create_title)) // 2), create_title, curses.color_pair(3) | curses.A_BOLD)
 
-            hint = "Choose a simple username and password (saved locally on your machine)"
+            hint = "Choose a username using small letters (lowercase a-z, 0-9, _) and a password"
             safe_addstr(stdscr, max(2, h // 2 - 4), max(0, (w - len(hint)) // 2), hint, curses.color_pair(4))
 
             input_y = max(4, h // 2 - 1)
             input_x = max(2, (w - 40) // 2)
 
-            username = prompt_text_input(stdscr, input_y, input_x, "New Username", is_password=False)
+            username = prompt_text_input(stdscr, input_y, input_x, "New Username (small letters)", is_password=False, lower_only=True)
             if not username:
                 message = "Profile creation cancelled."
                 message_color = curses.color_pair(4)
@@ -205,23 +442,19 @@ def auth_screen(stdscr) -> bool:
                 message = f"Error: {res_msg}"
                 message_color = curses.color_pair(2)
 
-        elif ch in (ord("3"),):
-            # Demo Mode
-            stats_manager.set_demo_mode()
-            return True
-
 
 def get_user_header_tag() -> str:
     """Returns a visual badge showing the current user or Demo mode."""
     if stats_manager.is_demo_mode():
         return "[DEMO MODE - STATS NOT SAVED]"
     user = stats_manager.get_active_user()
-    return f"[USER: {user.upper()}]" if user else "[GUEST]"
+    return f"[user: {user.lower()}]" if user else "[guest]"
 
 
 def difficulty_menu(stdscr):
     """
     Step 1: Select Difficulty Level (Easy, Medium, Hard), View Stats, or Switch User.
+    Uses high-contrast highlight bar with Up/Down arrows and Enter.
     """
     curses.curs_set(0)
     stdscr.nodelay(False)
@@ -249,19 +482,13 @@ def difficulty_menu(stdscr):
         subtitle = "STEP 1: Select Difficulty"
         safe_addstr(stdscr, max(2, h // 2 - 5), max(0, (w - len(subtitle)) // 2), subtitle, curses.color_pair(4))
 
-        for idx, (key, name, desc) in enumerate(options):
-            item_text = f" [{key}] {name} - {desc} "
-            y = h // 2 - 3 + (idx * 2)
-            x = max(2, (w - len(item_text)) // 2)
+        box_w = min(74, max(46, w - 6))
+        start_x = max(2, (w - box_w) // 2)
+        start_y = max(4, h // 2 - 3)
 
-            if idx == selected_idx:
-                stdscr.attron(curses.color_pair(5) | curses.A_BOLD | curses.A_REVERSE)
-                stdscr.addstr(y, x, item_text)
-                stdscr.attroff(curses.color_pair(5) | curses.A_BOLD | curses.A_REVERSE)
-            else:
-                stdscr.attron(curses.color_pair(4))
-                stdscr.addstr(y, x, item_text)
-                stdscr.attroff(curses.color_pair(4))
+        for idx, (key, name, desc) in enumerate(options):
+            y = start_y + (idx * 2)
+            draw_selection_row(stdscr, y, start_x, key, name, desc, idx == selected_idx, box_w)
 
         instructions = "Use [UP / DOWN] & [ENTER], press [1-3], [S] for Stats, [U] for User, or [ESC] to exit"
         safe_addstr(stdscr, max(0, h // 2 + 8), max(0, (w - len(instructions)) // 2), instructions, curses.color_pair(3))
@@ -302,6 +529,7 @@ def difficulty_menu(stdscr):
 def length_menu(stdscr, diff_key):
     """
     Step 2: Select Text Length (One Line, Stanza, One Page).
+    Uses high-contrast highlight bar with Up/Down arrows and Enter.
     """
     curses.curs_set(0)
     stdscr.nodelay(False)
@@ -324,20 +552,14 @@ def length_menu(stdscr, diff_key):
         subtitle = "STEP 2: Select Text Length"
         safe_addstr(stdscr, max(2, h // 2 - 5), max(0, (w - len(subtitle)) // 2), subtitle, curses.color_pair(4))
 
+        box_w = min(74, max(46, w - 6))
+        start_x = max(2, (w - box_w) // 2)
+        start_y = max(4, h // 2 - 2)
+
         for idx, key in enumerate(length_keys):
             info = lengths[key]
-            item_text = f" [{key}] {info['name']} - {info['description']} "
-            y = h // 2 - 2 + (idx * 2)
-            x = max(2, (w - len(item_text)) // 2)
-
-            if idx == selected_idx:
-                stdscr.attron(curses.color_pair(5) | curses.A_BOLD | curses.A_REVERSE)
-                stdscr.addstr(y, x, item_text)
-                stdscr.attroff(curses.color_pair(5) | curses.A_BOLD | curses.A_REVERSE)
-            else:
-                stdscr.attron(curses.color_pair(4))
-                stdscr.addstr(y, x, item_text)
-                stdscr.attroff(curses.color_pair(4))
+            y = start_y + (idx * 2)
+            draw_selection_row(stdscr, y, start_x, key, info["name"], info["description"], idx == selected_idx, box_w)
 
         instructions = "Use [UP / DOWN] & [ENTER], press [1-3], or [ESC] to go back"
         safe_addstr(stdscr, max(0, h // 2 + 6), max(0, (w - len(instructions)) // 2), instructions, curses.color_pair(3))
@@ -517,17 +739,17 @@ def result_screen(
         safe_addstr(stdscr, y_offset, max(0, (w - len(tip)) // 2), tip, curses.color_pair(3))
         y_offset += 1
 
-    prompt = "Press [ENTER] to play again, [M] for Menu, [S] for Stats, or [ESC] to quit"
-    safe_addstr(stdscr, y_offset + 2, max(0, (w - len(prompt)) // 2), prompt, curses.A_BLINK | curses.color_pair(3))
+    prompt = "  Press [ENTER] to play again  •  [ESC / M] Back to Menu  •  [S] Stats  •  [Q] Quit  "
+    safe_addstr(stdscr, y_offset + 2, max(0, (w - len(prompt)) // 2), prompt, curses.color_pair(7))
 
     stdscr.refresh()
 
     while True:
         ch = stdscr.getch()
-        if ch == 27:  # ESC
-            return "quit"
-        elif ch in (ord("m"), ord("M")):
+        if ch in (27, ord("m"), ord("M"), ord("b"), ord("B")):  # ESC, M, B goes back to previous menu
             return "menu"
+        elif ch in (ord("q"), ord("Q")):
+            return "quit"
         elif ch in (ord("s"), ord("S")):
             stats_dashboard(stdscr)
             return "menu"
@@ -558,21 +780,18 @@ def stats_dashboard(stdscr):
         box_w = min(74, max(52, w - 4))
         start_x = max(1, (w - box_w) // 2)
 
-        # Header Box
-        user_name = active_user.upper() if active_user else "GUEST / DEMO"
-        title_text = f" TYPING PROGRESS DASHBOARD  •  PROFILE: {user_name} "
-        border_line = "=" * box_w
+        # Header
+        user_name = active_user.lower() if active_user else "guest / demo"
+        title_text = f"=== TYPING PROGRESS DASHBOARD • PROFILE: {user_name} ==="
         div_line = "-" * (box_w - 4)
 
-        safe_addstr(stdscr, 1, start_x, border_line, curses.color_pair(3))
-        safe_addstr(stdscr, 2, start_x + max(0, (box_w - len(title_text)) // 2), title_text, curses.color_pair(3) | curses.A_BOLD)
-        safe_addstr(stdscr, 3, start_x, border_line, curses.color_pair(3))
+        safe_addstr(stdscr, 1, max(0, (w - len(title_text)) // 2), title_text, curses.color_pair(3) | curses.A_BOLD)
 
         if stats_manager.is_demo_mode():
             demo_msg = "  [DEMO MODE ACTIVE] Tests taken in Demo mode are not saved."
-            safe_addstr(stdscr, 5, start_x, demo_msg, curses.color_pair(6) | curses.A_BOLD)
+            safe_addstr(stdscr, 3, start_x, demo_msg, curses.color_pair(6) | curses.A_BOLD)
             hint_msg = "  Create or log into a profile to save personal bests and track weak keys."
-            safe_addstr(stdscr, 7, start_x, hint_msg, curses.color_pair(4))
+            safe_addstr(stdscr, 5, start_x, hint_msg, curses.color_pair(4))
             prompt = "[U] Login / Create Profile       [ESC / ENTER] Back to Menu"
             safe_addstr(stdscr, h - 2, max(0, (w - len(prompt)) // 2), prompt, curses.color_pair(3) | curses.A_BOLD)
             stdscr.refresh()
@@ -585,7 +804,7 @@ def stats_dashboard(stdscr):
                 return
             continue
 
-        # SECTION 1: PERFORMANCE OVERVIEW (Clean 2-column key/value grid)
+        # SECTION 1: PERFORMANCE OVERVIEW (Clean compact grid)
         total_sec = summary.get("total_time_seconds", 0.0)
         mins = int(total_sec // 60)
         secs = int(total_sec % 60)
@@ -594,29 +813,22 @@ def stats_dashboard(stdscr):
         ao5_str = f"{metrics['ao5']} WPM" if metrics["ao5"] is not None else "--"
         ao10_str = f"{metrics['ao10']} WPM" if metrics["ao10"] is not None else "--"
 
-        safe_addstr(stdscr, 5, start_x + 2, "PERFORMANCE OVERVIEW", curses.color_pair(5) | curses.A_BOLD)
-        safe_addstr(stdscr, 6, start_x + 2, div_line, curses.color_pair(4))
+        safe_addstr(stdscr, 3, start_x + 2, "PERFORMANCE OVERVIEW", curses.color_pair(5) | curses.A_BOLD)
+        safe_addstr(stdscr, 4, start_x + 2, div_line, curses.color_pair(4))
 
         col2_offset = (box_w - 4) // 2
 
-        # Row 1
-        safe_addstr(stdscr, 7, start_x + 2, f"Tests Taken:    {metrics['total_tests']:<6}", curses.color_pair(4))
-        safe_addstr(stdscr, 7, start_x + 2 + col2_offset, f"Practice Time:    {time_str}", curses.color_pair(4))
+        safe_addstr(stdscr, 5, start_x + 2, f"Tests Taken:    {metrics['total_tests']:<6}", curses.color_pair(4))
+        safe_addstr(stdscr, 5, start_x + 2 + col2_offset, f"Practice Time:  {time_str}", curses.color_pair(4))
 
-        # Row 2
-        safe_addstr(stdscr, 8, start_x + 2, f"Words Typed:    {summary.get('total_words', 0):<6}", curses.color_pair(4))
-        safe_addstr(stdscr, 8, start_x + 2 + col2_offset, f"Best Accuracy:    {metrics['best_acc']:.1f}%", curses.color_pair(4))
+        safe_addstr(stdscr, 6, start_x + 2, f"Top Speed:      {metrics['best_wpm']} WPM", curses.color_pair(1) | curses.A_BOLD)
+        safe_addstr(stdscr, 6, start_x + 2 + col2_offset, f"Average Speed:  {metrics['avg_wpm']:.1f} WPM", curses.color_pair(5) | curses.A_BOLD)
 
-        # Row 3
-        safe_addstr(stdscr, 9, start_x + 2, f"Top Speed:      {metrics['best_wpm']} WPM", curses.color_pair(1) | curses.A_BOLD)
-        safe_addstr(stdscr, 9, start_x + 2 + col2_offset, f"Average Speed:    {metrics['avg_wpm']:.1f} WPM", curses.color_pair(5) | curses.A_BOLD)
+        safe_addstr(stdscr, 7, start_x + 2, f"Best Accuracy:  {metrics['best_acc']:.1f}%", curses.color_pair(4))
+        safe_addstr(stdscr, 7, start_x + 2 + col2_offset, f"Ao5: {ao5_str:<7} Ao10: {ao10_str}", curses.color_pair(4))
 
-        # Row 4 (Rolling averages)
-        safe_addstr(stdscr, 10, start_x + 2, f"Rolling (Ao5):  {ao5_str}", curses.color_pair(4))
-        safe_addstr(stdscr, 10, start_x + 2 + col2_offset, f"Rolling (Ao10):   {ao10_str}", curses.color_pair(4))
-
-        # SECTION 2: WEAKEST KEYS (CLEAN & READABLE)
-        curr_y = 12
+        # SECTION 2: WEAKEST KEYS
+        curr_y = 9
         safe_addstr(stdscr, curr_y, start_x + 2, "WEAKEST KEYS (NEEDS FOCUS)", curses.color_pair(2) | curses.A_BOLD)
         curr_y += 1
         safe_addstr(stdscr, curr_y, start_x + 2, div_line, curses.color_pair(4))
@@ -624,69 +836,56 @@ def stats_dashboard(stdscr):
 
         if weak_keys:
             total_mistakes = sum(data.get("weak_keys", {}).values())
-            # Line 1: keys 1 to 3
-            l1_parts = []
-            for rank, (k, cnt) in enumerate(weak_keys[:3], 1):
-                pct = (cnt / total_mistakes) * 100 if total_mistakes else 0
-                l1_parts.append(f"{rank}. {stats_manager.format_key_name(k)}: {cnt} err ({pct:.0f}%)")
-            safe_addstr(stdscr, curr_y, start_x + 2, "     ".join(l1_parts), curses.color_pair(5))
-            curr_y += 1
-
-            # Line 2: keys 4 to 5 (if any)
-            if len(weak_keys) > 3:
-                l2_parts = []
-                for rank, (k, cnt) in enumerate(weak_keys[3:5], 4):
-                    pct = (cnt / total_mistakes) * 100 if total_mistakes else 0
-                    l2_parts.append(f"{rank}. {stats_manager.format_key_name(k)}: {cnt} err ({pct:.0f}%)")
-                safe_addstr(stdscr, curr_y, start_x + 2, "     ".join(l2_parts), curses.color_pair(5))
-                curr_y += 1
+            l_parts = [
+                f"{rank}. {stats_manager.format_key_name(k)}: {cnt} err"
+                for rank, (k, cnt) in enumerate(weak_keys[:5], 1)
+            ]
+            safe_addstr(stdscr, curr_y, start_x + 2, "   ".join(l_parts), curses.color_pair(5))
+            curr_y += 2
         else:
             safe_addstr(stdscr, curr_y, start_x + 2, "[ No errors recorded yet! Complete more tests to diagnose weak keys ]", curses.color_pair(4))
-            curr_y += 1
+            curr_y += 2
 
-        curr_y += 1
-
-        # SECTION 3: RECENT SPEED TREND
-        if h >= curr_y + 10:
+        # SECTION 3: RECENT SPEED TREND (Compact chart)
+        if h >= 26:
             safe_addstr(stdscr, curr_y, start_x + 2, "SPEED PROGRESSION (LAST 10 TESTS)", curses.color_pair(3) | curses.A_BOLD)
             curr_y += 1
             safe_addstr(stdscr, curr_y, start_x + 2, div_line, curses.color_pair(4))
             curr_y += 1
 
-            chart_lines = stats_manager.generate_ascii_chart(sessions, max_points=10, height=3)
+            chart_lines = stats_manager.generate_ascii_chart(sessions, max_points=10, height=2)
             for c_line in chart_lines:
                 safe_addstr(stdscr, curr_y, start_x + 2, c_line, curses.color_pair(4))
                 curr_y += 1
             curr_y += 1
 
-        # SECTION 4: RECENT TEST HISTORY
-        if h >= curr_y + 6:
-            safe_addstr(stdscr, curr_y, start_x + 2, "RECENT TEST HISTORY", curses.color_pair(5) | curses.A_BOLD)
-            curr_y += 1
-            safe_addstr(stdscr, curr_y, start_x + 2, div_line, curses.color_pair(4))
-            curr_y += 1
+        # SECTION 4: RECENT TEST HISTORY (Guaranteed 7 recent tests)
+        safe_addstr(stdscr, curr_y, start_x + 2, "RECENT TEST HISTORY (LAST 7 TESTS)", curses.color_pair(5) | curses.A_BOLD)
+        curr_y += 1
+        safe_addstr(stdscr, curr_y, start_x + 2, div_line, curses.color_pair(4))
+        curr_y += 1
 
-            tbl_header = f"  {'TIME':<7} {'MODE':<20} {'WPM':<7} {'ACCURACY':<11} {'TIME':<9} {'STATUS'}"
-            safe_addstr(stdscr, curr_y, start_x, tbl_header, curses.color_pair(3) | curses.A_BOLD)
+        tbl_header = f"  {'TIME':<7} {'MODE':<20} {'WPM':<7} {'ACCURACY':<11} {'TIME':<9} {'STATUS'}"
+        safe_addstr(stdscr, curr_y, start_x, tbl_header, curses.color_pair(3) | curses.A_BOLD)
+        curr_y += 1
+
+        max_rows = min(7, len(sessions))
+        recent_reversed = list(reversed(sessions))[:max_rows]
+        for s in recent_reversed:
+            ts = s.get("timestamp", "")
+            time_only = ts.split(" ")[-1] if " " in ts else ts
+            diff = s.get("diff_name", "Easy")
+            length = s.get("length_name", "One Line")
+            mode_str = f"{diff} ({length})"[:19]
+            wpm_val = s.get("wpm", 0)
+            acc = s.get("accuracy", 0.0)
+            dur = f"{s.get('elapsed_seconds', 0.0):.1f}s"
+            pb_str = "[PB]" if s.get("is_pb") else ""
+
+            row_str = f"  {time_only:<7} {mode_str:<20} {wpm_val:<7} {acc:5.1f}%      {dur:<9} {pb_str}"
+            attr = curses.color_pair(1) | curses.A_BOLD if s.get("is_pb") else curses.color_pair(4)
+            safe_addstr(stdscr, curr_y, start_x, row_str, attr)
             curr_y += 1
-
-            max_rows = min(3, max(1, h - curr_y - 3))
-            recent_reversed = list(reversed(sessions))[:max_rows]
-            for s in recent_reversed:
-                ts = s.get("timestamp", "")
-                time_only = ts.split(" ")[-1] if " " in ts else ts
-                diff = s.get("diff_name", "Easy")
-                length = s.get("length_name", "One Line")
-                mode_str = f"{diff} ({length})"[:19]
-                wpm_val = s.get("wpm", 0)
-                acc = s.get("accuracy", 0.0)
-                dur = f"{s.get('elapsed_seconds', 0.0):.1f}s"
-                pb_str = "[PB]" if s.get("is_pb") else ""
-
-                row_str = f"  {time_only:<7} {mode_str:<20} {wpm_val:<7} {acc:5.1f}%      {dur:<9} {pb_str}"
-                attr = curses.color_pair(1) | curses.A_BOLD if s.get("is_pb") else curses.color_pair(4)
-                safe_addstr(stdscr, curr_y, start_x, row_str, attr)
-                curr_y += 1
 
         # Footer controls
         prompt = "[C] Clear My Stats     [U] Switch Profile     [ESC / ENTER] Back to Menu"
@@ -811,6 +1010,8 @@ def main(stdscr):
     curses.init_pair(4, curses.COLOR_WHITE, -1)   # Target text & general UI
     curses.init_pair(5, curses.COLOR_YELLOW, -1)  # Selected / Stats / PBs
     curses.init_pair(6, curses.COLOR_MAGENTA, -1) # Demo mode badge
+    curses.init_pair(7, curses.COLOR_BLACK, curses.COLOR_WHITE)   # Light white selection highlight bar (crystal clear readability)
+    curses.init_pair(8, curses.COLOR_BLACK, curses.COLOR_YELLOW)  # Warning / alert highlight bar (solid yellow)
 
     # Step 0: Welcome / Auth screen (Login, Create User, Demo)
     if not auth_screen(stdscr):
