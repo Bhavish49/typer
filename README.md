@@ -96,7 +96,6 @@ For every difficulty level, you can choose the text length:
 | `UP` / `DOWN` | Navigate menu options |
 | `ENTER` | Confirm selection / Play again |
 | `C` | Clear history (inside Stats Dashboard) |
-| `BACKSPACE` | Delete previously typed character |
 | `ESC` | Go back to previous step / Return to menu / Exit |
 | `M` | Return to menu from results screen |
 

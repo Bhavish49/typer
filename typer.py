@@ -984,10 +984,8 @@ def run_test(stdscr, diff_key, length_key):
             char_positions, total_rows = layout_text(target_text, max_width)
             continue
 
-        if ch in (curses.KEY_BACKSPACE, 8, 127):
-            if len(current_text) > 0:
-                current_text.pop()
-        elif 32 <= ch <= 126 and len(current_text) < len(target_text):
+        # During a test, every typed character is final; backspace is ignored.
+        if 32 <= ch <= 126 and len(current_text) < len(target_text):
             if start_time is None:
                 start_time = time.time()
 
