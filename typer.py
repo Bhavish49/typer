@@ -677,7 +677,41 @@ def result_screen(
         errors_by_char=errors_by_char,
     )
 
-    y_offset = max(1, h // 2 - 9)
+    # Keep the summary readable in both narrow terminals and taller windows.
+    panel_width = min(84, max(36, w - 6))
+    left = max(1, (w - panel_width) // 2)
+    y_offset = max(1, min(4, h - 16))
+
+    def result_line(label, value, attr=curses.color_pair(4)):
+        nonlocal y_offset
+        safe_addstr(stdscr, y_offset, left + 2, f"{label:<18} {value}"[:panel_width - 2], attr)
+        y_offset += 1
+
+    def wrapped_items(title, items, attr, gap="   "):
+        nonlocal y_offset
+        safe_addstr(stdscr, y_offset, left + 2, title[:panel_width - 2], curses.color_pair(3) | curses.A_BOLD)
+        y_offset += 1
+        if y_offset >= h - 3:
+            return
+        if not items:
+            safe_addstr(stdscr, y_offset, left + 4, "None", curses.color_pair(4))
+            y_offset += 1
+            return
+        line = "    "
+        max_line_len = max(12, panel_width - 6)
+        for item in items:
+            if y_offset >= h - 3:
+                return
+            addition = (gap if line.strip() else "") + item
+            if len(line) + len(addition) > max_line_len and line.strip():
+                safe_addstr(stdscr, y_offset, left + 2, line.rstrip()[:panel_width - 2], attr)
+                y_offset += 1
+                line = "    " + item
+            else:
+                line += addition
+        if line.strip():
+            safe_addstr(stdscr, y_offset, left + 2, line.rstrip()[:panel_width - 2], attr)
+            y_offset += 1
 
     # Demo mode notification or Personal Best alert
     if stats_info.get("is_demo"):
@@ -686,61 +720,44 @@ def result_screen(
         y_offset += 2
     elif stats_info.get("is_category_pb"):
         prev_best = stats_info.get("prev_category_best", 0)
-        pb_banner = f"*** NEW PERSONAL BEST! (Previous: {prev_best} WPM -> Now: {wpm} WPM) ***"
+        pb_banner = f"NEW PERSONAL BEST  {prev_best} -> {wpm} WPM"
         safe_addstr(stdscr, y_offset, max(0, (w - len(pb_banner)) // 2), pb_banner, curses.color_pair(5) | curses.A_BOLD)
         y_offset += 2
 
-    banner = "=== TEST COMPLETE! ==="
+    banner = "TEST COMPLETE"
     safe_addstr(stdscr, y_offset, max(0, (w - len(banner)) // 2), banner, curses.color_pair(1) | curses.A_BOLD)
     y_offset += 2
 
     user_tag = get_user_header_tag()
-    config_info = f"Profile: {user_tag}   |   Difficulty: {diff_name}   |   Length: {length_name}"
-    safe_addstr(stdscr, y_offset, max(0, (w - len(config_info)) // 2), config_info, curses.color_pair(3))
-    y_offset += 2
+    result_line("PROFILE", user_tag)
+    result_line("TEST", f"{diff_name} / {length_name}")
 
     lifetime_avg = stats_info.get("lifetime_avg_wpm", float(wpm))
     diff_from_avg = stats_info.get("wpm_diff_from_avg", 0.0)
-    avg_comparison = (
-        f"({diff_from_avg:+.1f} vs lifetime avg of {lifetime_avg:.1f} WPM)" if not stats_info.get("is_demo") else ""
-    )
+    speed_value = f"{wpm} WPM"
+    if not stats_info.get("is_demo"):
+        speed_value += f"  ({diff_from_avg:+.1f} vs avg {lifetime_avg:.1f})"
+    result_line("TYPING SPEED", speed_value, curses.color_pair(5) | curses.A_BOLD)
+    result_line("ACCURACY", f"{accuracy:.1f}%", curses.color_pair(1) | curses.A_BOLD)
+    result_line("TIME", f"{elapsed:.1f} seconds")
+    result_line("CHARACTERS", f"{total_chars} typed    |    {errors} mistakes")
+    y_offset += 1
 
-    lines = [
-        f"Typing Speed:    {wpm} Words Per Minute (WPM) {avg_comparison}",
-        f"Accuracy:        {accuracy:.1f}%",
-        f"Time Elapsed:    {elapsed:.2f} seconds",
-        f"Characters:      {total_chars} typed ({errors} errors)",
-    ]
-
-    for idx, line in enumerate(lines):
-        y = y_offset + idx
-        x = max(0, (w - len(line)) // 2)
-        attr = curses.color_pair(5) | curses.A_BOLD if idx == 0 else curses.color_pair(4)
-        safe_addstr(stdscr, y, x, line, attr)
-
-    y_offset += len(lines) + 1
-
-    # WEAK KEYS SECTION: Display keys that stumbled in this session
+    # Make mistake keys visible as short, wrapped items instead of one long clipped row.
     session_stumbles = stats_info.get("session_weak_keys", [])
-    if session_stumbles:
-        stumble_items = [f"{stats_manager.format_key_name(k)}: {cnt}x" for k, cnt in session_stumbles]
-        stumble_line = "Keys Missed in this Test:  " + "   ".join(stumble_items)
-        safe_addstr(stdscr, y_offset, max(0, (w - len(stumble_line)) // 2), stumble_line, curses.color_pair(2) | curses.A_BOLD)
-        y_offset += 1
+    stumble_items = [f"{stats_manager.format_key_name(k)} ({cnt})" for k, cnt in session_stumbles]
+    wrapped_items("MISTAKES IN THIS TEST  (key: count)", stumble_items, curses.color_pair(2) | curses.A_BOLD, gap="  |  ")
 
     # All-time top weak keys
     all_time_weak = stats_info.get("all_time_weak_keys", [])
     if all_time_weak and not stats_info.get("is_demo"):
-        weak_items = [f"#{i+1} {stats_manager.format_key_name(k)} ({cnt} errs)" for i, (k, cnt) in enumerate(all_time_weak[:4])]
-        weak_line = "Top Stumbling Keys (All-Time):  " + "  |  ".join(weak_items)
-        safe_addstr(stdscr, y_offset, max(0, (w - len(weak_line)) // 2), weak_line, curses.color_pair(5))
-        y_offset += 1
-        tip = "[*] Tip: Slow down slightly on your weak keys to boost overall accuracy!"
-        safe_addstr(stdscr, y_offset, max(0, (w - len(tip)) // 2), tip, curses.color_pair(3))
-        y_offset += 1
+        weak_items = [f"#{i+1} {stats_manager.format_key_name(k)} ({cnt})" for i, (k, cnt) in enumerate(all_time_weak[:4])]
+        wrapped_items("MOST MISSED KEYS OVERALL", weak_items, curses.color_pair(5), gap="  |  ")
 
-    prompt = "  Press [ENTER] to play again  •  [ESC / M] Back to Menu  •  [S] Stats  •  [Q] Quit  "
-    safe_addstr(stdscr, y_offset + 2, max(0, (w - len(prompt)) // 2), prompt, curses.color_pair(7))
+    y_offset += 1
+
+    prompt = "[ENTER] Play Again   [ESC/M] Menu   [S] Stats   [Q] Quit"
+    safe_addstr(stdscr, min(h - 2, y_offset + 1), max(0, (w - len(prompt)) // 2), prompt, curses.color_pair(7))
 
     stdscr.refresh()
 
