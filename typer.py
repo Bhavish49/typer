@@ -318,7 +318,7 @@ def auth_screen(stdscr) -> bool:
         ch = stdscr.getch()
 
         chosen = None
-        if ch == 27:  # ESC
+        if ch == 27:  # Leave the app and return to the terminal from the home screen.
             return False
         elif ch in (curses.KEY_UP, ord("k"), ord("K")):
             selected_idx = (selected_idx - 1) % len(options)
@@ -490,14 +490,14 @@ def difficulty_menu(stdscr):
             y = start_y + (idx * 2)
             draw_selection_row(stdscr, y, start_x, key, name, desc, idx == selected_idx, box_w)
 
-        instructions = "Use [UP / DOWN] & [ENTER], press [1-3], [S] for Stats, [U] for User, or [ESC] to exit"
+        instructions = "Use [UP / DOWN] & [ENTER], press [1-3], [S] for Stats, [U] for User"
         safe_addstr(stdscr, max(0, h // 2 + 8), max(0, (w - len(instructions)) // 2), instructions, curses.color_pair(3))
 
         stdscr.refresh()
         ch = stdscr.getch()
 
-        if ch == 27:  # ESC exits
-            return None
+        if ch == 27:  # Return to the welcome/profile screen.
+            return "back"
         elif ch in (curses.KEY_UP, ord("k"), ord("K")):
             selected_idx = (selected_idx - 1) % len(options)
         elif ch in (curses.KEY_DOWN, ord("j"), ord("J")):
@@ -567,7 +567,7 @@ def length_menu(stdscr, diff_key):
         stdscr.refresh()
         ch = stdscr.getch()
 
-        if ch == 27:  # ESC goes back
+        if ch == 27:  # ESC returns to difficulty selection.
             return None
         elif ch in (curses.KEY_UP, ord("k"), ord("K")):
             selected_idx = (selected_idx - 1) % len(length_keys)
@@ -596,7 +596,7 @@ def display_typing_arena(
     progress = (len(current_text) / len(target_text)) * 100 if target_text else 0.0
 
     # Live HUD Bar
-    stats = f"  WPM: {wpm:3d}  |  Accuracy: {accuracy:5.1f}%  |  Time: {elapsed:4.1f}s  |  Progress: {progress:3.0f}%  |  [ESC: Menu]  "
+    stats = f"  WPM: {wpm:3d}  |  Accuracy: {accuracy:5.1f}%  |  Time: {elapsed:4.1f}s  |  Progress: {progress:3.0f}%  |  [ESC: Back]  "
     safe_addstr(stdscr, 3, max(0, (w - len(stats)) // 2), stats, curses.color_pair(5))
 
     # Divider
@@ -656,7 +656,8 @@ def display_typing_arena(
 
 
 def result_screen(
-    stdscr, diff_key, diff_name, length_key, length_name, wpm, accuracy, elapsed, total_chars, errors, errors_by_char
+    stdscr, diff_key, diff_name, length_key, length_name, wpm, accuracy, elapsed, total_chars, errors, errors_by_char,
+    stats_info=None,
 ):
     stdscr.nodelay(False)
     curses.curs_set(0)
@@ -664,18 +665,11 @@ def result_screen(
     h, w = stdscr.getmaxyx()
 
     # Record session & get stats comparison
-    stats_info = stats_manager.record_session(
-        diff_key,
-        diff_name,
-        length_key,
-        length_name,
-        wpm,
-        accuracy,
-        elapsed,
-        total_chars,
-        errors,
-        errors_by_char=errors_by_char,
-    )
+    if stats_info is None:
+        stats_info = stats_manager.record_session(
+            diff_key, diff_name, length_key, length_name, wpm, accuracy, elapsed, total_chars, errors,
+            errors_by_char=errors_by_char,
+        )
 
     # Keep the summary readable in both narrow terminals and taller windows.
     panel_width = min(84, max(36, w - 6))
@@ -756,20 +750,25 @@ def result_screen(
 
     y_offset += 1
 
-    prompt = "[ENTER] Play Again   [ESC/M] Menu   [S] Stats   [Q] Quit"
+    prompt = "[ENTER] Play Again   [ESC] Back   [M] Menu   [S] Stats   [Q] Quit"
     safe_addstr(stdscr, min(h - 2, y_offset + 1), max(0, (w - len(prompt)) // 2), prompt, curses.color_pair(7))
 
     stdscr.refresh()
 
     while True:
         ch = stdscr.getch()
-        if ch in (27, ord("m"), ord("M"), ord("b"), ord("B")):  # ESC, M, B goes back to previous menu
+        if ch == 27:
+            return "back"
+        elif ch in (ord("m"), ord("M"), ord("b"), ord("B")):
             return "menu"
         elif ch in (ord("q"), ord("Q")):
             return "quit"
         elif ch in (ord("s"), ord("S")):
             stats_dashboard(stdscr)
-            return "menu"
+            return result_screen(
+                stdscr, diff_key, diff_name, length_key, length_name, wpm, accuracy, elapsed,
+                total_chars, errors, errors_by_char, stats_info=stats_info,
+            )
         elif ch in (10, 13, curses.KEY_ENTER, ord(" ")):
             return "again"
 
@@ -992,8 +991,8 @@ def run_test(stdscr, diff_key, length_key):
             time.sleep(0.02)
             continue
 
-        if ch == 27:  # ESC to return to menu
-            return "menu"
+        if ch == 27:  # Return to the length selection screen.
+            return "back"
 
         if ch == curses.KEY_RESIZE:
             h, w = stdscr.getmaxyx()
@@ -1030,7 +1029,7 @@ def main(stdscr):
 
     # Step 0: Welcome / Auth screen (Login, Create User, Demo)
     if not auth_screen(stdscr):
-        return  # User pressed ESC to quit
+        return  # User selected Quit.
 
     diff_choice = None
     length_choice = None
@@ -1040,7 +1039,16 @@ def main(stdscr):
         if diff_choice is None:
             diff_choice = difficulty_menu(stdscr)
             if diff_choice is None:
-                break  # Exit
+                # ESC on the first menu returns to the welcome/profile screen.
+                if not auth_screen(stdscr):
+                    break
+                diff_choice = None
+                continue
+            if diff_choice == "back":
+                if not auth_screen(stdscr):
+                    break
+                diff_choice = None
+                continue
             if diff_choice == "stats":
                 stats_dashboard(stdscr)
                 diff_choice = None
@@ -1063,6 +1071,8 @@ def main(stdscr):
 
         if action == "quit":
             break
+        elif action == "back":
+            length_choice = None
         elif action == "menu":
             length_choice = None  # Return to length menu (or ESC to go back to difficulty)
         elif action == "again":
